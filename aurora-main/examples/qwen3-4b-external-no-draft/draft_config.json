@@ -1,0 +1,20 @@
+{
+  "architectures": [
+    "LlamaForCausalLMEagle3"
+  ],
+  "vocab_size": 151936,
+  "hidden_size": 2560,
+  "num_attention_heads": 32,
+  "num_key_value_heads": 8,
+  "intermediate_size": 9728,
+  "max_position_embeddings": 40960,
+  "rms_norm_eps": 1e-06,
+  "hidden_act": "silu",
+  "bos_token_id": 151643,
+  "eos_token_id": 151645,
+  "num_hidden_layers": 1,
+  "tie_word_embeddings": false,
+  "use_cache": true,
+  "model_type": "llama",
+  "draft_vocab_size": 32000
+}

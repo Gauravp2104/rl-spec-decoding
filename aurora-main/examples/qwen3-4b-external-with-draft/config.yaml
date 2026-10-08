@@ -1,0 +1,85 @@
+# External online training with draft model — Qwen3-4B
+#
+# External sglang server runs on separate GPU(s) and sends samples via HTTP callback.
+# Training actors train a draft model from scratch; weights are synced to sglang
+# for EAGLE3 speculative decoding.
+#
+# GPU allocation:
+#   - 2 GPUs for training (DP/FSDP: draft model sharded)
+#
+# Usage:
+#   bash examples/qwen3-4b-external-with-draft/run.sh
+
+model:
+  target_model_path: Qwen/Qwen3-4B
+  trust_remote_code: true
+  draft_model_config: ./examples/qwen3-4b-external-with-draft/draft_config.json
+
+dataset:
+  train_data_path: ./datasets/onlinesd/merged/merged_train_data.jsonl
+  chat_template: qwen
+  prompt_key: conversations
+  num_proc: 1
+
+training:
+  attention_backend: flex_attention
+  micro_batch_size: 4
+  draft_accumulation_steps: 1
+  learning_rate: 1e-4
+  max_concurrent_batches: 1
+  max_grad_norm: 2.5
+  max_seq_length: 2048
+  num_epochs: 1
+  seed: 42
+  training_num_gpus_per_node: 2
+  training_num_nodes: 1
+  ttt_length: 5
+  warmup_ratio: 0.0
+  lr_decay_style: constant
+  train_with_decode: true
+
+inference:
+  inference_engine_type: sgl
+  inference_num_gpus: 0  # No local engines — external sglang only
+  inference_num_gpus_per_engine: 1
+  inference_num_gpus_per_node: 1
+  max_sample_pool_size: 1000
+  inference_buffer_threshold: 32
+  inference_batch_size: 12
+  sglang:
+    tp_size: 1
+    mem_fraction_static: 0.7
+
+decode:
+  max_new_tokens: 512
+  temperature: 1.0
+  speculative_algorithm: EAGLE3
+  speculative_draft_model_path: null  # Set by run.sh (scratch draft model)
+  speculative_num_steps: 5
+  speculative_eagle_topk: 1
+  speculative_num_draft_tokens: 6
+  weight_sync_enabled: true
+  weight_sync_interval: 50
+
+online_serving:
+  enabled: true
+  host: "0.0.0.0"
+  port: 18080
+  sglang_url: null  # Set via CLI: online_serving.sglang_url=http://...
+
+mooncake:
+  master_server_address: null
+  metadata_server: null
+  protocol: tcp
+  global_segment_size: 16GB
+  local_buffer_size: 4GB
+  max_seq_len: 2560  # max_seq_length (2048) + max_new_tokens (512)
+
+output_dir: ./outputs/qwen3-4b-external-with-draft
+cache_dir: ./cache
+model_download_dir: null
+
+debug:
+  save_debug_train_data: null
+  debug_train_only: false
+  debug_inference_only: false

@@ -1,0 +1,80 @@
+# External online training WITHOUT local inference — Qwen3-Coder-Next
+# Target model: Qwen/Qwen3-Coder-Next (80B MoE, 3B active params)
+#
+# External sglang server runs on separate GPU(s) and sends samples via HTTP callback.
+# Training actors create and train a draft model from scratch.
+#
+# GPU allocation:
+#   - 2 GPUs for training (DP/FSDP: draft model sharded)
+#
+# Usage:
+#   bash examples/qwen3-next-coder-external-no-draft/run.sh
+
+model:
+  target_model_path: Qwen/Qwen3-Coder-Next
+  trust_remote_code: true
+
+dataset:
+  train_data_path: ./datasets/onlinesd/merged/merged_train_data.jsonl
+  chat_template: qwen
+  prompt_key: conversations
+
+training:
+  attention_backend: flex_attention
+  micro_batch_size: 4
+  draft_accumulation_steps: 1
+  learning_rate: 1e-4
+  max_concurrent_batches: 1
+  max_grad_norm: 2.5
+  max_seq_length: 2048
+  num_epochs: 1
+  seed: 42
+  training_num_gpus_per_node: 2
+  training_num_nodes: 1
+  ttt_length: 5
+  warmup_ratio: 0.0
+  lr_decay_style: constant
+  train_with_decode: true
+
+inference:
+  inference_engine_type: sgl
+  inference_num_gpus: 0  # No local engines — external sglang only
+  inference_num_gpus_per_engine: 1
+  inference_num_gpus_per_node: 1
+  max_sample_pool_size: 200
+  inference_buffer_threshold: 32
+  inference_batch_size: 12
+  sglang:
+    tp_size: 1
+    mem_fraction_static: 0.7
+
+decode:
+  max_new_tokens: 512
+  temperature: 1.0
+  speculative_algorithm: null
+  speculative_draft_model_path: null
+  weight_sync_enabled: false
+
+online_serving:
+  enabled: true
+  host: "0.0.0.0"
+  port: 18080
+  sglang_url: null  # Set via CLI: online_serving.sglang_url=http://...
+
+mooncake:
+  master_server_address: null
+  metadata_server: null
+  protocol: tcp
+  global_segment_size: 16GB
+  local_buffer_size: 4GB
+  hidden_dim: 2048
+  max_seq_len: 2560  # max_seq_length (2048) + max_new_tokens (512)
+
+output_dir: ./outputs/qwen3-next-coder-external-no-draft
+cache_dir: ./cache
+model_download_dir: null
+
+debug:
+  save_debug_train_data: null
+  debug_train_only: false
+  debug_inference_only: false

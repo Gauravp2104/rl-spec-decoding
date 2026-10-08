@@ -1,0 +1,82 @@
+# External training WITHOUT draft model — Kimi-K2.5 NVFP4 (2-node)
+#
+# Node 1: 8 GPUs for training (FSDP/DP)
+# Node 2: 8 GPUs for external sglang server (TP=8, NVFP4 quantization)
+#
+# Usage:
+#   Node 1: bash examples/kimi-k25-nvfp4-external-no-draft/run_trainer.sh
+#   Node 2: bash examples/kimi-k25-nvfp4-external-no-draft/run_sglang.sh
+
+model:
+  target_model_path: nvidia/Kimi-K2.5-NVFP4
+  trust_remote_code: true
+  lm_head_key: language_model.lm_head.weight
+  embedding_key: language_model.model.embed_tokens.weight
+  draft_model_config: ./examples/kimi-k25-nvfp4-external-no-draft/draft_config.json
+
+dataset:
+  train_data_path: ./datasets/onlinesd/merged/merged_train_data.jsonl
+  chat_template: qwen
+  prompt_key: conversations
+  num_proc: 1
+
+training:
+  attention_backend: flex_attention
+  micro_batch_size: 2
+  draft_accumulation_steps: 1
+  learning_rate: 1e-4
+  max_concurrent_batches: 1
+  max_grad_norm: 1
+  max_seq_length: 8192
+  num_epochs: 1
+  seed: 42
+  training_num_gpus_per_node: 8
+  training_num_nodes: 1
+  ttt_length: 5
+  warmup_ratio: 0.0
+  lr_decay_style: constant
+  train_with_decode: true
+  gradient_checkpointing: true
+
+inference:
+  inference_engine_type: sgl
+  inference_num_gpus: 0  # No local engines — external sglang only
+  inference_num_gpus_per_engine: 1
+  inference_num_gpus_per_node: 8
+  max_sample_pool_size: 64
+  inference_buffer_threshold: 8
+  inference_batch_size: 8
+  sglang:
+    tp_size: 8
+    mem_fraction_static: 0.85
+
+decode:
+  max_new_tokens: 512
+  temperature: 1.0
+  speculative_algorithm: null
+  speculative_draft_model_path: null
+  weight_sync_enabled: false
+
+online_serving:
+  enabled: true
+  host: "0.0.0.0"
+  port: 18080
+  sglang_url: null  # Set by run_trainer.sh
+
+mooncake:
+  master_server_address: null
+  metadata_server: null
+  protocol: tcp
+  global_segment_size: 16GB
+  local_buffer_size: 4GB
+  hidden_dim: 7168
+  max_seq_len: 8704  # max_seq_length (8192) + max_new_tokens (512)
+
+output_dir: ./outputs/kimi-k25-nvfp4-external-no-draft
+cache_dir: ./cache
+model_download_dir: null
+
+debug:
+  save_debug_train_data: null
+  debug_train_only: false
+  debug_inference_only: false
