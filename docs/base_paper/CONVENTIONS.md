@@ -43,7 +43,7 @@ Follow-up branches target their parent sub-task branch while it is open, otherwi
 - Every issue/PR: `base-paper`; add `mac-repro` if it must run on Apple Silicon.
 - Every issue/PR is added to the **Base paper implementation** GitHub Project.
 - Board status: `Todo` → `In Progress` → `Done`.
-- Sub-task issues are **sub-issues** of the tracking issue `[BP] Base paper implementation`.
+- Sub-task issues are **sub-issues** of the tracking issue `[BP-0] Base paper implementation`.
 
 ## PR workflow
 
