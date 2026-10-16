@@ -1,0 +1,18 @@
+# Mac (Apple Silicon / MPS) dependencies for the scaled-down Aurora reproduction.
+# Aurora itself is installed with `--no-deps` to skip the CUDA/cluster-only stack
+# (mooncake-transfer-engine, ray, sglang-router, flash-attn).
+torch>=2.6
+transformers==4.57.1
+datasets
+accelerate
+safetensors
+huggingface_hub
+omegaconf
+pydantic
+numba
+numpy<2.4
+tqdm
+psutil
+wandb            # imported by aurora.utils.logging; run with WANDB_MODE=offline
+matplotlib
+pytest
