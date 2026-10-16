@@ -10,4 +10,7 @@ uv pip install -r mini_aurora/requirements-mac.txt
 uv pip install -e aurora-main --no-deps   # Aurora model/loss/data code without Mooncake / Ray / SGLang
 uv pip install -e . --no-deps             # mini_aurora package
 
+# Python 3.12+ skips .pth files with the macOS "hidden" flag, which breaks the editable installs above.
+chflags nohidden .venv/lib/python3.12/site-packages/*.pth
+
 echo "Done. Activate with: source .venv/bin/activate && source mini_aurora/env.sh"

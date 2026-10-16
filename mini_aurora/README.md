@@ -15,10 +15,17 @@ bash mini_aurora/setup_mac.sh
 source .venv/bin/activate && source mini_aurora/env.sh
 
 # 3. Check it works (3 + 17 tests pass)
-pytest -q && (cd aurora-main && pytest -q tests/test_parse.py tests/test_vocab_mapping.py)
+python -m pytest -q && (cd aurora-main && python -m pytest -q tests/test_parse.py tests/test_vocab_mapping.py)
 ```
 
 Re-run step 1 only if `mini_aurora/requirements-mac.txt` changes or `.venv` is deleted. It is safe to re-run.
+
+### Troubleshooting
+
+| Error | Cause | Fix |
+|---|---|---|
+| `No module named 'torch'` | A different `pytest`/`python` (e.g. Anaconda's) runs instead of the venv's; `which pytest` shows `/opt/anaconda3/...` | Activate the venv (step 2), run `conda deactivate` if `(base)` is shown, and use `python -m pytest` |
+| `No module named 'aurora'` (torch imports fine) | macOS marked the venv's `.pth` files hidden and Python 3.12+ skips them (`python -v -c pass 2>&1 \| grep hidden`) | `chflags nohidden .venv/lib/python3.12/site-packages/*.pth` (or re-run step 1) |
 
 ## [BP-01] Mac environment + device layer
 
