@@ -3,19 +3,29 @@
 Scaled-down Aurora reproduction (base paper only, no GRPO) that runs on one Apple Silicon Mac.
 Plan: [`docs/base_paper/PLAN.md`](../docs/base_paper/PLAN.md). Conventions: [`docs/base_paper/CONVENTIONS.md`](../docs/base_paper/CONVENTIONS.md).
 
+## Quick start
+
+Prerequisites: Apple Silicon Mac, [`uv`](https://docs.astral.sh/uv/) (`brew install uv`), ~3 GB free disk.
+
+```bash
+# 1. Once per clone (from the repo root, ~2–5 min)
+bash mini_aurora/setup_mac.sh
+
+# 2. Every new terminal
+source .venv/bin/activate && source mini_aurora/env.sh
+
+# 3. Check it works (3 + 17 tests pass)
+pytest -q && (cd aurora-main && pytest -q tests/test_parse.py tests/test_vocab_mapping.py)
+```
+
+Re-run step 1 only if `mini_aurora/requirements-mac.txt` changes or `.venv` is deleted. It is safe to re-run.
+
 ## [BP-01] Mac environment + device layer
 
 Tracks #4. Branch: `bp/01-env-mac`. Status: **done**.
 
-### Setup (once, from the repo root)
-
-```bash
-bash mini_aurora/setup_mac.sh                     # creates .venv (Python 3.12) and installs everything
-source .venv/bin/activate && source mini_aurora/env.sh
-```
-
-`setup_mac.sh` does:
-1. `uv venv --python 3.12 .venv`
+### What `setup_mac.sh` does
+1. `uv venv --python 3.12 .venv` (skipped if `.venv` exists)
 2. `uv pip install -r mini_aurora/requirements-mac.txt`: torch (MPS), `transformers==4.57.1` (Aurora's pin), datasets, accelerate, omegaconf, pydantic, numba, wandb (offline), matplotlib, pytest.
 3. `uv pip install -e aurora-main --no-deps`: Aurora's model/loss/data code **without** Mooncake, Ray, sglang-router and flash-attn (CUDA/cluster-only).
 4. `uv pip install -e . --no-deps`: this package (root `pyproject.toml`).

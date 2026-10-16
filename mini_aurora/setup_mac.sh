@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-uv venv --python 3.12 .venv
+[ -d .venv ] || uv venv --python 3.12 .venv   # reuse an existing venv
 # shellcheck disable=SC1091
 source .venv/bin/activate
 uv pip install -r mini_aurora/requirements-mac.txt
