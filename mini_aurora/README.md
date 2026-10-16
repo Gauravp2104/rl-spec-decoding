@@ -18,6 +18,7 @@ source .venv/bin/activate && source mini_aurora/env.sh
 python -m pytest -q && (cd aurora-main && python -m pytest -q tests/test_parse.py tests/test_vocab_mapping.py)
 ```
 
+Run every command from the **repo root** (the folder with `pyproject.toml`, `aurora-main/`, `mini_aurora/`).
 Re-run step 1 only if `mini_aurora/requirements-mac.txt` changes or `.venv` is deleted. It is safe to re-run.
 
 ### Troubleshooting
@@ -25,14 +26,14 @@ Re-run step 1 only if `mini_aurora/requirements-mac.txt` changes or `.venv` is d
 | Error | Cause | Fix |
 |---|---|---|
 | `No module named 'torch'` | A different `pytest`/`python` (e.g. Anaconda's) runs instead of the venv's; `which pytest` shows `/opt/anaconda3/...` | Activate the venv (step 2), run `conda deactivate` if `(base)` is shown, and use `python -m pytest` |
-| `No module named 'aurora'` (torch imports fine) | macOS marked the venv's `.pth` files hidden and Python 3.12+ skips them (`python -v -c pass 2>&1 \| grep hidden`) | `chflags nohidden .venv/lib/python3.12/site-packages/*.pth` (or re-run step 1) |
+| `No module named 'aurora'` / `'mini_aurora'` (torch imports fine) | iCloud "Desktop & Documents" sync marked the venv's `.pth` files hidden and Python 3.12+ skips them (`python -v -c pass 2>&1 \| grep hidden`). `setup_mac.sh` avoids this by keeping the venv in `.venv.nosync` (not synced) with `.venv` as a symlink | Re-run step 1; quick fix: `chflags nohidden .venv/lib/python3.12/site-packages/*.pth` |
 
 ## [BP-01] Mac environment + device layer
 
 Tracks #4. Branch: `bp/01-env-mac`. Status: **done**.
 
 ### What `setup_mac.sh` does
-1. `uv venv --python 3.12 .venv` (skipped if `.venv` exists)
+1. `uv venv --python 3.12 .venv.nosync` (skipped if it exists) and symlink `.venv -> .venv.nosync`
 2. `uv pip install -r mini_aurora/requirements-mac.txt`: torch (MPS), `transformers==4.57.1` (Aurora's pin), datasets, accelerate, omegaconf, pydantic, numba, wandb (offline), matplotlib, pytest.
 3. `uv pip install -e aurora-main --no-deps`: Aurora's model/loss/data code **without** Mooncake, Ray, sglang-router and flash-attn (CUDA/cluster-only).
 4. `uv pip install -e . --no-deps`: this package (root `pyproject.toml`).
