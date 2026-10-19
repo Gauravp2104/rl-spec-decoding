@@ -89,7 +89,7 @@ Merge order: **BP-01 → (BP-02, BP-03) → (BP-04, BP-05) → BP-06 → BP-07 �
 ### BP-03 — Target + EAGLE-3 draft on MPS (`bp/03-models-mps`)
 - Load Qwen3-0.6B via `HFTargetModel` (aux layers [1, 13, 24]).
 - `examples/mac-qwen3-0.6b/draft_config.json`: hidden 1024, 16 heads, 8 KV heads, intermediate 3072, 1 layer, `draft_vocab_size: 16000`.
-- `Eagle3Model(draft, length=3, attention_backend="sdpa")`; frozen embedding and target `lm_head` shared with the target (tied weights).
+- `Eagle3Model(draft, length=3, attention_backend="sdpa")`; embedding copied from the target and frozen. The draft has its own trainable 16K-row `lm_head` (as in Aurora); the target `lm_head` only produces the training labels.
 - **Done when:** overfit test drives loss on one batch toward 0 in ~200 steps; step time and peak memory recorded.
 
 ### BP-04 — Offline static EAGLE-3 baseline (`bp/04-static-baseline`)

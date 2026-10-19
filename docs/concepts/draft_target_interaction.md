@@ -3,8 +3,8 @@
 How the **target** (Qwen3-0.6B, 28 layers, frozen) and the **EAGLE-3 draft** (1 decoder layer, trained online)
 work together in our implementation.
 
-> **Status (2026-10-19):** target loading and aux hidden-state capture are implemented
-> (`mini_aurora/models/target.py`, BP-03). Everything else here is the design for BP-03 – BP-06.
+> **Status (2026-10-19):** target loading, aux capture, the draft (shared weights, vocab buffers) and the
+> TTT forward/loss are implemented (`mini_aurora/models/`, BP-03). Serving and the online loop are the design for BP-05 – BP-06.
 
 ## Classic speculative decoding vs. EAGLE
 
@@ -47,18 +47,20 @@ flowchart TB
         TH["lm_head<br/>1024 → 151,936 tokens"]
     end
     subgraph Draft["EAGLE-3 draft"]
-        DE["Embedding (shared, frozen)"]
+        DE["Embedding (copied, frozen)"]
         FC["fc: 3072 → 1024 (trained)"]
         DL["1 decoder layer + norm (trained)"]
-        DH["lm_head (shared, frozen)<br/>pruned to 16K draft vocab via d2t / t2d"]
+        DH["lm_head: 1024 → 16K (trained)<br/>own weights; d2t maps outputs to target IDs"]
     end
-    TE -. "same weights" .-> DE
-    TH -. "same weights" .-> DH
+    TE -. "copied once" .-> DE
+    TH -. "labels only (training)" .-> DH
 ```
 
-- The draft **reuses** the target's embedding and `lm_head` (frozen). The `lm_head` output is pruned to the
-  16K most frequent tokens using the `d2t` / `t2d` mapping (BP-02).
-- Only `fc`, the single decoder layer and its norm are trained.
+- The draft **copies** the target's embedding once and freezes it (155.6M parameters).
+- The draft has its **own** `lm_head` over the 16K most frequent tokens (`d2t` / `t2d`, BP-02; see
+  [vocabulary.md](vocabulary.md)). The target's `lm_head` is never part of the draft; it only turns
+  `last_hidden_states` into training labels.
+- Trained: `fc`, the decoder layer, `norm` and the draft `lm_head` (34.2M parameters).
 
 ## 2. Inside the draft: one guess
 
@@ -154,7 +156,7 @@ flowchart LR
 
 | Direction | What | When |
 |---|---|---|
-| Target → draft | Embedding + `lm_head` weights (shared, frozen) | Once, at setup |
+| Target → draft | Embedding weights (copied, frozen) | Once, at setup |
 | Target → draft | Aux hidden states (layers 1, 13, 24) | Every prefill / verify pass |
 | Draft → target | K guessed tokens (+ draft probs when sampling) | Every round |
 | Target → output | Accepted tokens + 1 target token | Every round |

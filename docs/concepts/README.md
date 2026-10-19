@@ -8,3 +8,4 @@ Figures are [Mermaid](https://mermaid.js.org/) blocks, so they render on GitHub 
 | Doc | Covers |
 |---|---|
 | [draft_target_interaction.md](draft_target_interaction.md) | What passes between the target and the EAGLE-3 draft: shared weights, aux hidden states, draft → verify rounds, training samples, online weight sync |
+| [vocabulary.md](vocabulary.md) | Why a vocabulary is needed, the draft's pruned 16K vocab, `d2t` / `t2d` with a toy example, and how it fits the RL (GRPO) project |
