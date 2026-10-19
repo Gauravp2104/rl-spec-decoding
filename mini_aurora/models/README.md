@@ -26,7 +26,25 @@ Tracks #8. Branch: `bp/03-models-mps`.
   3-step TTT unroll); `weighted_loss()` = Σ 0.8^i · loss_i.
   As in Aurora, the draft has its **own trainable 16K-row `lm_head`**; the target `lm_head` only makes the labels.
   Parameters: 34.2M trainable (`fc`, decoder layer, `norm`, `lm_head`), 155.6M frozen (embedding).
-- [ ] Overfit test, step time and peak memory
+- [x] **Overfit test** (`overfit.py`, `tests/test_overfit.py`): 4 built-in samples in one right-padded batch
+  (4 × 95 tokens, 234 assistant tokens); target features captured once; AdamW (lr 1e-3, no weight decay,
+  grad clip 1.0) for 200 steps on that batch. Passes with `PYTORCH_ENABLE_MPS_FALLBACK=0`.
+
+### Overfit results (M5 Pro 24 GB, MPS, batch 4 × 95, 200 steps)
+
+| Draft weights | Loss step 0 → 199 (per TTT position) | Target-entropy floor | Final KL | Final acc | Median step | Peak MPS |
+|---|---|---|---|---|---|---|
+| fp32 (default) | 9.87 → 0.851 | 0.849 | 0.002 | 0.991 / 0.986 / 0.981 | 97.8 ms | 3.29 GB |
+| bf16 (`--bf16`, Aurora's dtype) | 9.87 → 0.852 | 0.849 | 0.003 | 0.986 / 0.995 / 0.986 | 69.1 ms | 2.71 GB |
+
+Accuracy passes 0.94 by step 20 and 0.99 by step 100.
+
+- **Why the loss doesn't reach 0:** the loss is cross-entropy against the target's *soft* distribution, so its
+  minimum is the target's entropy (0.849 here). The part the draft controls, KL = loss − entropy, does go to ~0.
+- **Why accuracy stops at ~98–99%:** 4 of the 234 assistant positions are each sequence's last token, whose
+  "next token" is past the end, so the label is meaningless (same behaviour as Aurora's trainer).
+- **Step time** covers draft forward + backward + AdamW only (target features are cached). Peak MPS includes the
+  frozen target (1.2 GB) and the draft's 155.6M-parameter frozen embedding (0.62 GB in fp32).
 
 ## Run a few queries on MPS
 
@@ -60,6 +78,14 @@ data = tokenize_conversations(tokenizer, SAMPLE_CONVERSATIONS[:1])
 features = capture_features(target, data["input_ids"][0].to(target.model.device), data["loss_mask"][0])
 plosses, acces = forward_step(eagle3, features, target_lm_head_weight(target))
 weighted_loss(plosses).backward()      # random init: loss ≈ 9.9 per position (ln 16000 ≈ 9.68), acc 0
+```
+
+## Run the overfit test
+
+```bash
+python -m mini_aurora.models.overfit                                       # 200 steps, fp32 draft, prints every 20 steps
+python -m mini_aurora.models.overfit --bf16 --out outputs/overfit/bf16.json   # bf16 draft, save full history
+python -m pytest -q mini_aurora/tests/test_overfit.py                      # ~25 s; asserts KL < 0.05, acc ≥ 0.95
 ```
 
 JSONL rows for `--jsonl` hold a conversation under `conversations` or `messages` (`role`/`content` or ShareGPT

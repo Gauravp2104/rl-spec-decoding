@@ -84,11 +84,17 @@ def generate(
     )
 
 
-def capture_features(target: HFTargetModel, input_ids: torch.Tensor, loss_mask: torch.Tensor | None = None):
-    """Run ``generate_eagle3_data`` on ``input_ids`` (full attention; loss mask defaults to all tokens)."""
+def capture_features(
+    target: HFTargetModel,
+    input_ids: torch.Tensor,
+    loss_mask: torch.Tensor | None = None,
+    attention_mask: torch.Tensor | None = None,
+):
+    """Run ``generate_eagle3_data`` on ``input_ids``; both masks default to all tokens."""
     ones = torch.ones_like(input_ids)
     loss_mask = ones if loss_mask is None else loss_mask.to(input_ids.device)
-    return target.generate_eagle3_data(input_ids=input_ids, attention_mask=ones, loss_mask=loss_mask)
+    attention_mask = ones if attention_mask is None else attention_mask.to(input_ids.device)
+    return target.generate_eagle3_data(input_ids=input_ids, attention_mask=attention_mask, loss_mask=loss_mask)
 
 
 def _sync(device: torch.device) -> None:
