@@ -1,0 +1,20 @@
+# Linux CPU image for machines that cannot run Aurora natively (Intel Macs: the last x86_64 macOS torch
+# wheel is 2.2, Aurora needs >= 2.3 for torch.nn.attention). Mount the repo at /work.
+#
+#   docker build -f mini_aurora/docker/Dockerfile.cpu -t mini-aurora-cpu .
+#   bash mini_aurora/docker/run_cpu.sh python -m mini_aurora.data.vocab --compare
+FROM python:3.12-slim
+
+ENV PIP_NO_CACHE_DIR=1 PYTHONUNBUFFERED=1 \
+    PYTORCH_ENABLE_MPS_FALLBACK=1 TORCHDYNAMO_DISABLE=1 WANDB_MODE=offline TOKENIZERS_PARALLELISM=false \
+    MINI_AURORA_DEVICE=cpu HF_HOME=/hf
+
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+
+COPY mini_aurora/docker/requirements-cpu.txt /tmp/requirements-cpu.txt
+RUN pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.6,<2.8" \
+ && pip install -r /tmp/requirements-cpu.txt
+
+WORKDIR /work
+# The repo is bind-mounted at runtime; run_cpu.sh installs aurora-main and mini_aurora in editable mode.
+ENTRYPOINT ["bash", "mini_aurora/docker/entrypoint.sh"]
