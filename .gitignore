@@ -7,3 +7,5 @@ __pycache__/
 .DS_Store
 wandb/
 outputs/
+data/raw/
+data/streams/
