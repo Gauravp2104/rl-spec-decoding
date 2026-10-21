@@ -156,8 +156,9 @@ def build_domain(domain: str, tokenizer, per_domain: int, seed: int, cache_dir: 
             "messages": messages,
             "n_tokens": n_tokens,
         })
+    dropped = sum(reasons.values())
     reasons["kept"] = len(kept)
-    reasons["seen"] = sum(reasons.values()) - len(kept)
+    reasons["seen"] = len(kept) + dropped
     return kept, reasons
 
 
