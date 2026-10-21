@@ -66,6 +66,11 @@ for the static baseline ~5 GB (optional — can be computed on the fly). **≈10
 | Sample pool (128 samples) | ~1 GB | ~2 GB |
 | **Peak** | **~6–8 GB** | **~11–14 GB** |
 
+**Measured (BP-03, 0.6B, batch 4 × 95 tokens, draft trainer only):** peak MPS 3.29 GB with an fp32 draft
+(2.71 GB bf16), 98 ms / 69 ms per AdamW step; 34.2M trainable + 155.6M frozen (embedding) draft parameters.
+With real data (4 × 1025 tokens): **9.92 GB** fp32 / 8.24 GB bf16, 622 / 360 ms per step; 1 × 1025 fp32: 4.35 GB.
+So the 6–8 GB peak above only holds for batch ≤ 2 at 1K tokens (or with gradient checkpointing) — size BP-04 accordingly.
+
 **Experiment disk:** ~0.5 GB per draft checkpoint (0.6B); ~6–18 GB for ~12 runs. **Total ≤ ~30 GB** (≤ ~50 GB with 1.7B).
 **Time:** ~12 runs × 1–3 h + development ≈ 30–50 Mac-hours. Run experiments sequentially, under `caffeinate -i`.
 
@@ -89,7 +94,7 @@ Merge order: **BP-01 → (BP-02, BP-03) → (BP-04, BP-05) → BP-06 → BP-07 �
 ### BP-03 — Target + EAGLE-3 draft on MPS (`bp/03-models-mps`)
 - Load Qwen3-0.6B via `HFTargetModel` (aux layers [1, 13, 24]).
 - `examples/mac-qwen3-0.6b/draft_config.json`: hidden 1024, 16 heads, 8 KV heads, intermediate 3072, 1 layer, `draft_vocab_size: 16000`.
-- `Eagle3Model(draft, length=3, attention_backend="sdpa")`; frozen embedding and target `lm_head` shared with the target (tied weights).
+- `Eagle3Model(draft, length=3, attention_backend="sdpa")`; embedding copied from the target and frozen. The draft has its own trainable 16K-row `lm_head` (as in Aurora); the target `lm_head` only produces the training labels.
 - **Done when:** overfit test drives loss on one batch toward 0 in ~200 steps; step time and peak memory recorded.
 
 ### BP-04 — Offline static EAGLE-3 baseline (`bp/04-static-baseline`)

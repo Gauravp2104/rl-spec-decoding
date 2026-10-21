@@ -44,7 +44,7 @@ One JSON object per line, the full conversation plus tags:
 - The **server** (BP-05) takes the first user turn as the request. The **offline baseline** (BP-04) and the
   **vocab mapping** use the assistant turns. Keeping the whole conversation in one file serves all three.
 - `n_tokens` is the length of the Qwen3 chat-templated conversation; `pos` is the index within a stream.
-- `mini_aurora.models.vocab --jsonl` (BP-03) reads this format directly (`messages` key).
+- `python -m mini_aurora.models.overfit --stream ... --domain ...` (BP-03) reads this format directly (`messages` key).
 
 ## Pools (`data/raw/`, `stats.json`)
 
