@@ -6,6 +6,10 @@ wired correctly; it says nothing about generalisation (that is BP-04).
 
     python -m mini_aurora.models.overfit                         # 200 steps on 4 built-in samples
     python -m mini_aurora.models.overfit --steps 300 --lr 5e-4 --out outputs/overfit/run.json
+    python -m mini_aurora.models.overfit --vocab outputs/vocab/qwen3_16k_mixed.pt \
+        --stream data/streams/mixed.jsonl --domain chat          # real mapping + real chat-length batch
+
+By default the batch and the vocab mapping both come from ``samples.py`` (no downloaded data needed).
 
 The loss is forward KL as cross-entropy against the target's soft distribution, so its floor is the
 target's entropy, not 0; ``kl`` (loss − entropy) is the part that should go to ~0, and accuracy to ~1.
@@ -30,7 +34,7 @@ from mini_aurora.models.draft import (
 )
 from mini_aurora.models.samples import SAMPLE_CONVERSATIONS
 from mini_aurora.models.target import capture_features, load_target, load_tokenizer
-from mini_aurora.models.vocab import build_vocab_mapping, tokenize_conversations
+from mini_aurora.models.vocab import build_vocab_mapping, coverage, load_vocab_mapping, tokenize_conversations
 
 from aurora.models.eagle3 import compute_target_p_padded  # noqa: I001
 from aurora.utils.tensor import padding
@@ -46,6 +50,9 @@ class OverfitResult:
     trainable_params: int
     frozen_params: int
     target_entropy: list[float]  # per TTT position: floor of the loss
+    vocab: str = "samples"  # mapping file, or "samples" (built in memory)
+    data: str = "samples"  # stream file (+ domain), or "samples"
+    batch_coverage: float = 1.0  # assistant tokens of the batch inside the draft vocab
     loss: list[list[float]] = field(default_factory=list)  # [step][position]
     acc: list[list[float]] = field(default_factory=list)
     step_ms: list[float] = field(default_factory=list)
@@ -68,6 +75,19 @@ class OverfitResult:
         # Skip warm-up steps (kernel compilation / allocator growth).
         timed = sorted(self.step_ms[5:] or self.step_ms)
         return timed[len(timed) // 2]
+
+
+def load_stream_conversations(path: str | Path, n: int, domain: str | None = None) -> list:
+    """First ``n`` conversations (``messages``) of a BP-02 stream, optionally from one domain."""
+    rows = []
+    with open(path) as f:
+        for line in f:
+            row = json.loads(line)
+            if domain is None or row["domain"] == domain:
+                rows.append(row["messages"])
+                if len(rows) == n:
+                    break
+    return rows
 
 
 def make_batch(tokenizer, conversations: list, device: torch.device) -> dict[str, torch.Tensor]:
@@ -113,12 +133,22 @@ def run_overfit(
     device: torch.device | None = None,
     log_every: int = 20,
     seed: int = 0,
+    vocab_path: str | Path | None = None,
+    stream: str | Path | None = None,
+    domain: str | None = None,
 ) -> OverfitResult:
+    """Overfit one batch. ``vocab_path`` / ``stream`` swap in a saved mapping / a BP-02 stream for the samples."""
     torch.manual_seed(seed)
     device = device or get_device()
     target, tokenizer = load_target(device=device), load_tokenizer()
-    conversations = SAMPLE_CONVERSATIONS[:batch_size]
-    vocab = build_vocab_mapping(tokenizer, SAMPLE_CONVERSATIONS, target.model.config.vocab_size)
+    if stream:
+        conversations = load_stream_conversations(stream, batch_size, domain)
+    else:
+        conversations = SAMPLE_CONVERSATIONS[:batch_size]
+    if vocab_path:
+        vocab = load_vocab_mapping(vocab_path)
+    else:
+        vocab = build_vocab_mapping(tokenizer, SAMPLE_CONVERSATIONS, target.model.config.vocab_size)
     draft = build_draft(target, vocab, device=device, dtype=draft_dtype)
     eagle3 = wrap_eagle3(draft).train()
     lm_head = target_lm_head_weight(target)
@@ -135,6 +165,9 @@ def run_overfit(
         trainable_params=trainable,
         frozen_params=frozen,
         target_entropy=target_entropy(features, lm_head, draft.t2d, eagle3.length),
+        vocab=str(vocab_path or "samples"),
+        data=f"{stream}" + (f" ({domain})" if domain else "") if stream else "samples",
+        batch_coverage=coverage(draft.t2d, batch["input_ids"], batch["loss_mask"]),
     )
 
     optimizer = torch.optim.AdamW([p for p in eagle3.parameters() if p.requires_grad], lr=lr, weight_decay=0.0)
@@ -172,6 +205,9 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=200)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--batch-size", type=int, default=4, help=f"≤ {len(SAMPLE_CONVERSATIONS)} built-in samples")
+    parser.add_argument("--vocab", default=None, help="saved mapping, e.g. outputs/vocab/qwen3_16k_mixed.pt")
+    parser.add_argument("--stream", default=None, help="BP-02 stream JSONL to take the batch from")
+    parser.add_argument("--domain", default=None, choices=["chat", "code", "math"], help="filter the stream")
     parser.add_argument("--bf16", action="store_true", help="bf16 draft weights (default fp32)")
     parser.add_argument("--device", default=None)
     parser.add_argument("--out", default=None, help="write the full history as JSON")
@@ -183,9 +219,13 @@ def main() -> None:
         batch_size=args.batch_size,
         draft_dtype=torch.bfloat16 if args.bf16 else torch.float32,
         device=get_device(args.device),
+        vocab_path=args.vocab,
+        stream=args.stream,
+        domain=args.domain,
     )
+    print(f"\nvocab {result.vocab}, data {result.data}, batch coverage {result.batch_coverage:.3f}")
     print(
-        f"\nbatch {result.batch_size} × {result.seq_len} tokens ({result.assistant_tokens} assistant), "
+        f"batch {result.batch_size} × {result.seq_len} tokens ({result.assistant_tokens} assistant), "
         f"{result.trainable_params / 1e6:.1f}M trainable / {result.frozen_params / 1e6:.1f}M frozen"
     )
     print(f"final loss {_fmt(result.final_loss)}  (floor = target entropy {_fmt(result.target_entropy)})")

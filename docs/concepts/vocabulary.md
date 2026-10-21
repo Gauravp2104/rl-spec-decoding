@@ -3,8 +3,9 @@
 Why the models need a vocabulary, why the draft uses a smaller one (16K of the target's 151,936 tokens), how
 the `d2t` / `t2d` mappings translate between them, and how this fits the later RL (GRPO) project.
 
-> **Status (2026-10-19):** `mini_aurora/models/vocab.py` wraps Aurora's `generate_vocab_mapping`, caches the
-> mapping and checks coverage; BP-03 uses a temporary mapping from built-in samples until BP-02's streams exist. See also [draft_target_interaction.md](draft_target_interaction.md).
+> **Status (2026-10-21):** `mini_aurora/models/vocab.py` wraps Aurora's `generate_vocab_mapping`, caches the
+> mapping and checks coverage; `python -m mini_aurora.data.vocab` (BP-02) builds the real mapping from the mixed
+> stream → `outputs/vocab/qwen3_16k_mixed.pt`. See also [draft_target_interaction.md](draft_target_interaction.md).
 
 ## Why a vocabulary is needed
 
@@ -140,6 +141,10 @@ accepted length (see PLAN.md §6). The pruned vocab is a good fit:
    code or math tokens put a hard ceiling on τ. Mitigation: build the mapping from the **mixed** stream
    (all three domains), check coverage per domain (aim for ≥ 99%), and raise `draft_vocab_size` if code or math
    falls short.
+
+   **Measured (BP-02, 16K):** mixed mapping covers chat 0.971 / code 0.977 / math 0.992; a chat-only mapping
+   covers 0.977 / 0.911 / 0.951. All-domain coverage by size: 16K 0.976, 20K 0.987, 24K 0.994, 28K 1.000.
+   16K is below the 99% target; choose the size (and freeze it) before BP-04.
 
 ```mermaid
 flowchart LR

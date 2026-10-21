@@ -68,7 +68,8 @@ for the static baseline ~5 GB (optional — can be computed on the fly). **≈10
 
 **Measured (BP-03, 0.6B, batch 4 × 95 tokens, draft trainer only):** peak MPS 3.29 GB with an fp32 draft
 (2.71 GB bf16), 98 ms / 69 ms per AdamW step; 34.2M trainable + 155.6M frozen (embedding) draft parameters.
-Long sequences will raise the vocab-logits term; re-measure at 2–4K tokens in BP-04.
+With real data (4 × 1025 tokens): **9.92 GB** fp32 / 8.24 GB bf16, 622 / 360 ms per step; 1 × 1025 fp32: 4.35 GB.
+So the 6–8 GB peak above only holds for batch ≤ 2 at 1K tokens (or with gradient checkpointing) — size BP-04 accordingly.
 
 **Experiment disk:** ~0.5 GB per draft checkpoint (0.6B); ~6–18 GB for ~12 runs. **Total ≤ ~30 GB** (≤ ~50 GB with 1.7B).
 **Time:** ~12 runs × 1–3 h + development ≈ 30–50 Mac-hours. Run experiments sequentially, under `caffeinate -i`.
