@@ -4,7 +4,7 @@ Tracks #6. Branch: `bp/02-data-streams`.
 
 - Public replacements for Aurora's private mixed dataset: ShareGPT (`Aeala/ShareGPT_Vicuna_unfiltered`), CodeAlpaca, GSM8K; ~1K prompts per domain.
 - Emit **mixed** (shuffled), **ordered** (grouped by domain), **domain-shift** (chat→code→math) JSONL streams.
-- Reuse `qwen` chat template, `compute_assistant_loss_mask`, `generate_vocab_mapping` → 16K `d2t`/`t2d`.
+- Reuse `qwen` chat template, `compute_assistant_loss_mask`, `generate_vocab_mapping` → 24K `d2t`/`t2d` (16K until BP-04).
 - **Done when:** three streams + cached vocab mapping on disk (CPU only).
 
 ## Run
@@ -13,7 +13,7 @@ Tracks #6. Branch: `bp/02-data-streams`.
 source .venv/bin/activate && source mini_aurora/env.sh
 python -m mini_aurora.data.download          # ~5 min: ShareGPT json (464 MB) + two small sets -> data/raw/*.jsonl
 python -m mini_aurora.data.streams           # -> data/streams/{mixed,ordered,domain_shift}.jsonl
-python -m mini_aurora.data.vocab --compare   # -> outputs/vocab/qwen3_16k_mixed.{pt,json}   (needs Aurora, see below)
+python -m mini_aurora.data.vocab --compare   # -> outputs/vocab/qwen3_24k_mixed.{pt,json}   (needs Aurora, see below)
 python -m pytest -q mini_aurora/tests/test_data.py
 ```
 
@@ -77,22 +77,24 @@ assistant turn for training and for vocab counting.
 The shift stream starts with a long chat run so the drafter settles before the first shift (E2 in BP-08).
 Segment lengths are a constant in `mini_aurora/data/__init__.py`.
 
-## Vocab mapping (`outputs/vocab/qwen3_16k_mixed.pt`)
+## Vocab mapping (`outputs/vocab/qwen3_24k_mixed.pt`)
 
-Built from the assistant tokens of the **mixed** stream with Aurora's `generate_vocab_mapping` (top-16K by
+Built from the assistant tokens of the **mixed** stream with Aurora's `generate_vocab_mapping` (top-24K by
 frequency) and saved as `{"d2t", "t2d", "meta"}`, the format `mini_aurora.models.vocab` loads. Tokens outside
 the draft vocab can never be drafted, so per-domain coverage is the number that matters
 (`docs/concepts/vocabulary.md`). `--compare` also builds a chat-only mapping for comparison:
 
 | mapping built from | chat | code | math |
 |---|---|---|---|
-| **mixed (all domains)**, shipped | 0.971 | 0.977 | 0.992 |
-| chat only | 0.977 | 0.911 | 0.951 |
+| **mixed (all domains)**, shipped (24K) | 0.993 | 0.995 | 0.998 |
+| chat only (24K) | 0.998 | 0.929 | 0.962 |
+| mixed (16K, BP-02) | 0.971 | 0.977 | 0.992 |
+| chat only (16K, BP-02) | 0.977 | 0.911 | 0.951 |
 
-All-domains costs 0.7 points on chat and gains 6.6 on code and 4.1 on math, so it is the one to use.
+All-domains costs 0.6 points on chat and gains 6.6 on code and 3.6 on math (24K), so it is the one to use.
 
 The mixed stream has 27.6K distinct assistant tokens and the top 16K cover 97.6% of occurrences, so only math
-reaches the 99% target from the concept notes at 16K. Coverage by draft vocab size (`draft_vocab_size` in
+reached the 99% target from the concept notes at 16K. Coverage by draft vocab size (`draft_vocab_size` in
 `examples/mac-qwen3-0.6b/draft_config.json`, a BP-03 setting; ranking by frequency, ties broken arbitrarily):
 
 | size | chat | code | math | all |
@@ -103,11 +105,12 @@ reaches the 99% target from the concept notes at 16K. Coverage by draft vocab si
 | 28000 | 1.000 | 1.000 | 1.000 | 1.000 |
 
 These are in-sample numbers (the mapping is scored on the stream it was built from); held-out coverage will
-be a little lower. 16K is kept as the default to match the plan; raising it to 24K costs ~8M more draft
-`lm_head` parameters (1024 × 8K) and is the lever if τ̄ on code turns out to be vocab-capped.
+be a little lower. **BP-04 switched the default to 24K** (every domain ≥ 99%): it costs ~8M more draft
+`lm_head` parameters (1024 × 8K) and ~1 GB peak memory, recovered with bf16 + gradient checkpointing
+(`mini_aurora/models/README.md`). The sweep table above used an earlier tie-breaking, hence small differences.
 
 ## Done when
 
 - [x] three streams on disk (`data/streams/`)
-- [x] cached vocab mapping (`outputs/vocab/qwen3_16k_mixed.pt`) with per-domain coverage (`.json` next to it)
+- [x] cached vocab mapping (`outputs/vocab/qwen3_24k_mixed.pt`; 16K in BP-02) with per-domain coverage (`.json` next to it)
 - [x] CPU only (streams: any machine; vocab: Apple Silicon, CUDA, or the CPU container)

@@ -3,7 +3,7 @@
 Thin layer over Aurora's ``generate_vocab_mapping``, which keeps the ``draft_vocab_size`` most frequent
 assistant tokens. The real mapping is built from BP-02's mixed stream by the CLI in ``mini_aurora.data.vocab``:
 
-    python -m mini_aurora.data.vocab --compare             # → outputs/vocab/qwen3_16k_mixed.{pt,json}
+    python -m mini_aurora.data.vocab --compare             # → outputs/vocab/qwen3_24k_mixed.{pt,json}
 """
 
 from pathlib import Path
@@ -16,8 +16,8 @@ import mini_aurora  # noqa: F401  (sets MPS env vars before Aurora imports)
 from aurora.data.preprocessing import generate_vocab_mapping, preprocess_conversations  # noqa: I001
 from aurora.data.template import TEMPLATE_REGISTRY
 
-DRAFT_VOCAB_SIZE = 16000
-DEFAULT_VOCAB = "outputs/vocab/qwen3_16k_mixed.pt"
+DRAFT_VOCAB_SIZE = 24000
+DEFAULT_VOCAB = "outputs/vocab/qwen3_24k_mixed.pt"
 
 
 def tokenize_conversations(

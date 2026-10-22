@@ -16,5 +16,5 @@
   "tie_word_embeddings": false,
   "use_cache": true,
   "model_type": "llama",
-  "draft_vocab_size": 16000
+  "draft_vocab_size": 24000
 }
