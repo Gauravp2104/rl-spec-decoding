@@ -7,6 +7,11 @@ Tracks #8. Branch: `bp/03-models-mps`.
 - `Eagle3Model(draft, length=3, attention_backend="sdpa")`; embedding copied from the target and frozen. The draft has its own trainable 16K-row `lm_head` (as in Aurora); the target `lm_head` only produces the training labels.
 - **Done when:** overfit test drives loss on one batch toward 0 in ~200 steps; step time and peak memory recorded.
 
+> **BP-04 update:** the draft vocab is now **24K** (`draft_vocab_size: 24000`, `outputs/vocab/qwen3_24k_mixed.pt`,
+> coverage chat 0.993 / code 0.995 / math 0.998, 42.4M trainable) and `wrap_eagle3` / `overfit` take
+> `gradient_checkpointing` / `--grad-ckpt`. The BP-03 results below were measured with 16K; the 24K memory
+> numbers are in [24K vocab memory](#24k-vocab-memory-bp-04).
+
 ## Progress
 
 - [x] **Target model** (`target.py`): `load_target()` loads Qwen3-0.6B through Aurora's `HFTargetModel` on `get_device()`
@@ -17,10 +22,11 @@ Tracks #8. Branch: `bp/03-models-mps`.
   16 heads / 8 KV heads, intermediate 3072, 1 layer, `vocab_size` 151,936, `draft_vocab_size` 16,000
   (same layout as Aurora's `examples/qwen3-*` configs).
 - [x] **Vocab mapping** (`vocab.py`, library): `build_vocab_mapping()` tokenizes conversations with the `qwen`
-  template and assistant-only loss mask, then calls Aurora's `generate_vocab_mapping` (top-16K assistant tokens →
+  template and assistant-only loss mask, then calls Aurora's `generate_vocab_mapping` (top-`DRAFT_VOCAB_SIZE` assistant tokens →
   `d2t` offsets, `t2d` mask); `save_vocab_mapping` / `load_vocab_mapping` cache it; `coverage()` checks coverage.
   BP-02's CLI (`python -m mini_aurora.data.vocab`) uses these functions to build the real mapping from the mixed
-  stream → `outputs/vocab/qwen3_16k_mixed.pt` (`DEFAULT_VOCAB`); coverage chat 0.971 / code 0.977 / math 0.992.
+  stream → `outputs/vocab/qwen3_24k_mixed.pt` (`DEFAULT_VOCAB`); coverage chat 0.993 / code 0.995 / math 0.998
+  (16K in BP-03: 0.971 / 0.977 / 0.992).
   `samples.py` (2 chat + 2 code + 2 math) is only for tests and the default overfit run, which need no downloaded data.
 - [x] **Draft + wrapper** (`draft.py`): `build_draft()` builds the draft from the config, copies the target embedding
   and freezes it, and sets the vocab buffers; `wrap_eagle3()` = `Eagle3Model(draft, length=3, attention_backend="sdpa")`.
@@ -56,6 +62,23 @@ Accuracy passes 0.94 by step 20 and 0.99 by step 100.
   mostly the 16K-wide draft logits × 3 TTT steps. For BP-04: bf16, batch 1–2 at 1K tokens, or gradient
   checkpointing (`Eagle3Model(..., gradient_checkpointing=True)`).
 
+### 24K vocab memory (BP-04)
+
+Real chat batch 4 × 1025 tokens, 30 steps; `driver_allocated_memory` is coarse, so treat < 1 GB differences as
+approximate.
+
+| Vocab | Draft weights | Grad ckpt | Peak MPS | Median step | Batch coverage |
+|---|---|---|---|---|---|
+| 16K | fp32 | – | 8.85 GB | 620 ms | 0.967 |
+| 16K | bf16 | – | 8.24 GB | 353 ms | 0.967 |
+| 16K | fp32 | ✓ | 7.77 GB | 780 ms | 0.967 |
+| 24K | fp32 | – | 9.92 GB | 720 ms | 0.991 |
+| 24K | bf16 | – | 9.32 GB | 412 ms | 0.991 |
+| 24K | fp32 | ✓ | 8.85 GB | 896 ms | 0.991 |
+| **24K** | **bf16** | **✓** | **7.17 GB** | **503 ms** | 0.991 |
+
+24K adds 8.2M `lm_head` parameters and ~1 GB; bf16 + checkpointing (the BP-04 default) more than recovers it.
+
 - **Why the loss doesn't reach 0:** the loss is cross-entropy against the target's *soft* distribution, so its
   minimum is the target's entropy (0.849 here). The part the draft controls, KL = loss − entropy, does go to ~0.
 - **Why accuracy stops at ~98–99%:** 4 of the 234 assistant positions are each sequence's last token, whose
@@ -78,7 +101,7 @@ python -m pytest -q mini_aurora/tests/test_target.py                       # 3 t
 
 ```bash
 python -m mini_aurora.data.download && python -m mini_aurora.data.streams   # BP-02 data (once, ~5 min)
-python -m mini_aurora.data.vocab --compare                                 # real mapping → outputs/vocab/qwen3_16k_mixed.pt
+python -m mini_aurora.data.vocab --compare                                 # real mapping → outputs/vocab/qwen3_24k_mixed.pt
 python -m pytest -q mini_aurora/tests/test_vocab.py mini_aurora/tests/test_draft.py
 PYTORCH_ENABLE_MPS_FALLBACK=0 python -m pytest -q mini_aurora/tests/test_draft.py   # proves no silent CPU fallback
 ```
@@ -90,11 +113,11 @@ from mini_aurora.models.draft import build_draft, wrap_eagle3, forward_step, wei
 from mini_aurora.models.samples import SAMPLE_CONVERSATIONS
 
 target, tokenizer = load_target(), load_tokenizer()
-eagle3 = wrap_eagle3(build_draft(target, load_vocab_mapping(DEFAULT_VOCAB)))   # outputs/vocab/qwen3_16k_mixed.pt
+eagle3 = wrap_eagle3(build_draft(target, load_vocab_mapping(DEFAULT_VOCAB)))   # outputs/vocab/qwen3_24k_mixed.pt
 data = tokenize_conversations(tokenizer, SAMPLE_CONVERSATIONS[:1])
 features = capture_features(target, data["input_ids"][0].to(target.model.device), data["loss_mask"][0])
 plosses, acces = forward_step(eagle3, features, target_lm_head_weight(target))
-weighted_loss(plosses).backward()      # random init: loss ≈ 9.9 per position (ln 16000 ≈ 9.68), acc 0
+weighted_loss(plosses).backward()      # random init: loss ≈ 10 per position (ln 24000 ≈ 10.09), acc 0
 ```
 
 ## Run the overfit test
@@ -102,7 +125,8 @@ weighted_loss(plosses).backward()      # random init: loss ≈ 9.9 per position 
 ```bash
 python -m mini_aurora.models.overfit                                       # 200 steps, fp32 draft, prints every 20 steps
 python -m mini_aurora.models.overfit --bf16 --out outputs/overfit/bf16.json   # bf16 draft, save full history
-python -m mini_aurora.models.overfit --vocab outputs/vocab/qwen3_16k_mixed.pt --stream data/streams/mixed.jsonl --domain chat
+python -m mini_aurora.models.overfit --vocab outputs/vocab/qwen3_24k_mixed.pt --stream data/streams/mixed.jsonl --domain chat
+python -m mini_aurora.models.overfit --bf16 --grad-ckpt --vocab outputs/vocab/qwen3_24k_mixed.pt --stream data/streams/mixed.jsonl --domain chat
 python -m pytest -q mini_aurora/tests/test_overfit.py                      # ~25 s; asserts KL < 0.05, acc ≥ 0.95
 ```
 

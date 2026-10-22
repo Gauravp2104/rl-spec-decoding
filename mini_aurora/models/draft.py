@@ -2,9 +2,9 @@
 
 Mirrors ``aurora/training/eagle3_trainer.py`` without FSDP / Ray / Mooncake:
 
-- draft built from ``examples/mac-qwen3-0.6b/draft_config.json`` (1 layer, 16K draft vocab);
+- draft built from ``examples/mac-qwen3-0.6b/draft_config.json`` (1 layer, 24K draft vocab);
 - embedding copied from the target and frozen; ``fc``, the decoder layer, ``norm`` and the
-  16K-row draft ``lm_head`` are trained (the target ``lm_head`` only produces the labels);
+  24K-row draft ``lm_head`` are trained (the target ``lm_head`` only produces the labels);
 - ``d2t`` / ``t2d`` vocab buffers set from a cached mapping;
 - ``forward_step`` = ``Eagle3Trainer._forward``: shift tokens and target states by one, build pruned
   target probabilities, run the ``length``-step TTT unroll.
@@ -56,9 +56,15 @@ def build_draft(
     return draft.to(device)
 
 
-def wrap_eagle3(draft: Eagle3DraftModel, length: int = TTT_LENGTH) -> Eagle3Model:
-    """``Eagle3Model`` with SDPA attention and no gradient checkpointing (small model, one device)."""
-    return Eagle3Model(draft, length=length, attention_backend="sdpa", gradient_checkpointing=False)
+def wrap_eagle3(
+    draft: Eagle3DraftModel, length: int = TTT_LENGTH, gradient_checkpointing: bool = False
+) -> Eagle3Model:
+    """``Eagle3Model`` with SDPA attention.
+
+    ``gradient_checkpointing`` recomputes the per-step loss (draft logits × 3 TTT steps) in backward instead of
+    storing it: with a bf16 draft at 4 × 1K tokens, peak MPS drops from 9.3 to 7.2 GB for ~20% more step time.
+    """
+    return Eagle3Model(draft, length=length, attention_backend="sdpa", gradient_checkpointing=gradient_checkpointing)
 
 
 def target_lm_head_weight(target: HFTargetModel) -> torch.Tensor:

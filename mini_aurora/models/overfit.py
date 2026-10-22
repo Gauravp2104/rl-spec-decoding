@@ -6,7 +6,8 @@ wired correctly; it says nothing about generalisation (that is BP-04).
 
     python -m mini_aurora.models.overfit                         # 200 steps on 4 built-in samples
     python -m mini_aurora.models.overfit --steps 300 --lr 5e-4 --out outputs/overfit/run.json
-    python -m mini_aurora.models.overfit --vocab outputs/vocab/qwen3_16k_mixed.pt \
+    python -m mini_aurora.models.overfit --bf16 --grad-ckpt     # BP-04's memory-saving setting
+    python -m mini_aurora.models.overfit --vocab outputs/vocab/qwen3_24k_mixed.pt \
         --stream data/streams/mixed.jsonl --domain chat          # real mapping + real chat-length batch
 
 By default the batch and the vocab mapping both come from ``samples.py`` (no downloaded data needed).
@@ -136,6 +137,7 @@ def run_overfit(
     vocab_path: str | Path | None = None,
     stream: str | Path | None = None,
     domain: str | None = None,
+    gradient_checkpointing: bool = False,
 ) -> OverfitResult:
     """Overfit one batch. ``vocab_path`` / ``stream`` swap in a saved mapping / a BP-02 stream for the samples."""
     torch.manual_seed(seed)
@@ -150,7 +152,7 @@ def run_overfit(
     else:
         vocab = build_vocab_mapping(tokenizer, SAMPLE_CONVERSATIONS, target.model.config.vocab_size)
     draft = build_draft(target, vocab, device=device, dtype=draft_dtype)
-    eagle3 = wrap_eagle3(draft).train()
+    eagle3 = wrap_eagle3(draft, gradient_checkpointing=gradient_checkpointing).train()
     lm_head = target_lm_head_weight(target)
 
     batch = make_batch(tokenizer, conversations, device)
@@ -205,10 +207,11 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=200)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--batch-size", type=int, default=4, help=f"≤ {len(SAMPLE_CONVERSATIONS)} built-in samples")
-    parser.add_argument("--vocab", default=None, help="saved mapping, e.g. outputs/vocab/qwen3_16k_mixed.pt")
+    parser.add_argument("--vocab", default=None, help="saved mapping, e.g. outputs/vocab/qwen3_24k_mixed.pt")
     parser.add_argument("--stream", default=None, help="BP-02 stream JSONL to take the batch from")
     parser.add_argument("--domain", default=None, choices=["chat", "code", "math"], help="filter the stream")
     parser.add_argument("--bf16", action="store_true", help="bf16 draft weights (default fp32)")
+    parser.add_argument("--grad-ckpt", action="store_true", help="gradient checkpointing (less memory, slower)")
     parser.add_argument("--device", default=None)
     parser.add_argument("--out", default=None, help="write the full history as JSON")
     args = parser.parse_args()
@@ -222,6 +225,7 @@ def main() -> None:
         vocab_path=args.vocab,
         stream=args.stream,
         domain=args.domain,
+        gradient_checkpointing=args.grad_ckpt,
     )
     print(f"\nvocab {result.vocab}, data {result.data}, batch coverage {result.batch_coverage:.3f}")
     print(

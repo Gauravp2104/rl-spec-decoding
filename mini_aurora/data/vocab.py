@@ -1,10 +1,10 @@
-"""Cache the 16K draft vocab mapping from a stream and report per-domain coverage (needs Aurora: torch >= 2.3).
+"""Cache the 24K draft vocab mapping from a stream and report per-domain coverage (needs Aurora: torch >= 2.3).
 
-    python -m mini_aurora.data.vocab                       # mixed stream -> outputs/vocab/qwen3_16k_mixed.pt
+    python -m mini_aurora.data.vocab                       # mixed stream -> outputs/vocab/qwen3_24k_mixed.pt
     python -m mini_aurora.data.vocab --compare             # also build chat-only and report both coverages
 
 Building, coverage and the ``{"d2t", "t2d", "meta"}`` file format live in ``mini_aurora.models.vocab`` (BP-03).
-The mapping is built from the **mixed** stream (all three domains): tokens outside the 16K can never be
+The mapping is built from the **mixed** stream (all three domains): tokens outside the 24K can never be
 drafted, so a chat-only mapping would cap acceptance on the code and math segments of the shift stream
 (docs/concepts/vocabulary.md). ``--compare`` prints the numbers behind that choice.
 """

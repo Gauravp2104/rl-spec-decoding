@@ -18,7 +18,7 @@ def test_overfit_one_batch():
     result = run_overfit(steps=200, log_every=0)
     first, last = result.loss[0], result.final_loss
     assert all(math.isfinite(x) for row in result.loss for x in row)
-    # Random init starts near ln(16000) ≈ 9.68 and must drop to the target-entropy floor.
+    # Random init starts near ln(24000) ≈ 10.09 and must drop to the target-entropy floor.
     assert all(f > 9.0 for f in first)
     assert all(kl < 0.05 for kl in result.final_kl), result.final_kl
     assert all(loss < f / 5 for loss, f in zip(last, first))
