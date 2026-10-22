@@ -2,12 +2,13 @@
 
     python -m mini_aurora.baseline.train                            # 2 epochs on outputs/baseline/hidden_states/train
     python -m mini_aurora.baseline.train --limit 20 --epochs 1       # smoke test
-    python -m mini_aurora.baseline.train --bf16 --out outputs/baseline/checkpoints_bf16
+    python -m mini_aurora.baseline.train --dtype fp32 --no-grad-ckpt --out outputs/baseline/checkpoints_fp32
 
 Defaults follow Aurora's ``TrainingConfig`` where it applies: AdamW, lr 1e-4 (PLAN.md "scratch"), no weight
 decay, 1.5% linear warmup then cosine decay, grad clip 0.5, loss ``sum_i 0.8^i * ploss_i``, batch 2 with
 gradient accumulation 4 (PLAN.md micro-batch 1-2, accumulation 4). The draft starts from the target's
-embedding (frozen) and the cached vocab mapping; everything else is random (day-0).
+embedding (frozen) and the cached 24K vocab mapping; everything else is random (day-0). Default draft setting is
+the BP-04 one from mini_aurora/models/README.md: bf16 weights with gradient checkpointing.
 
 Writes per-step metrics to ``<out>/train_log.csv``, a held-out evaluation per epoch to ``<out>/eval.json``,
 and a checkpoint per epoch (``mini_aurora.baseline.checkpoint``).
@@ -28,11 +29,9 @@ from mini_aurora.baseline.evaluate import evaluate
 from mini_aurora.device import empty_cache, get_device, get_dtype, memory_allocated_gb
 from mini_aurora.models.draft import build_draft, forward_step, param_counts, target_lm_head_weight, weighted_loss, wrap_eagle3
 from mini_aurora.models.target import load_target
-from mini_aurora.models.vocab import load_vocab_mapping
+from mini_aurora.models.vocab import DEFAULT_VOCAB, load_vocab_mapping
 
 from aurora.training.lr_scheduler import LRSchedulerWithWarmup  # noqa: I001
-
-DEFAULT_VOCAB = "outputs/vocab/qwen3_16k_mixed.pt"
 
 
 def train(
@@ -45,7 +44,8 @@ def train(
     accumulation: int = 4,
     warmup_ratio: float = 0.015,
     max_grad_norm: float = 0.5,
-    bf16: bool = False,
+    bf16: bool = True,
+    gradient_checkpointing: bool = True,
     limit: int | None = None,
     seed: int = 0,
     log_every: int = 10,
@@ -60,7 +60,7 @@ def train(
 
     target = load_target(device=device)
     draft = build_draft(target, load_vocab_mapping(vocab_path), device=device, dtype=draft_dtype)
-    eagle3 = wrap_eagle3(draft).train()
+    eagle3 = wrap_eagle3(draft, gradient_checkpointing=gradient_checkpointing).train()
     lm_head = target_lm_head_weight(target)
     trainable, frozen = param_counts(eagle3)
 
@@ -76,7 +76,7 @@ def train(
                                       warmup_steps=int(warmup_ratio * total_steps), decay_style="cosine")
     config = {"dump_dir": dump_dir, "vocab": vocab_path, "epochs": epochs, "lr": lr, "batch_size": batch_size,
               "accumulation": accumulation, "warmup_ratio": warmup_ratio, "max_grad_norm": max_grad_norm,
-              "draft_dtype": str(draft_dtype).split(".")[-1], "device": device.type, "seed": seed, "limit": limit,
+              "draft_dtype": str(draft_dtype).split(".")[-1], "gradient_checkpointing": gradient_checkpointing, "device": device.type, "seed": seed, "limit": limit,
               "train_conversations": len(train_loader.dataset), "steps_per_epoch": steps_per_epoch,
               "total_steps": total_steps, "trainable_params": trainable, "frozen_params": frozen}
     print(json.dumps(config, indent=2))
@@ -140,14 +140,15 @@ def main() -> None:
     p.add_argument("--accumulation", type=int, default=4)
     p.add_argument("--warmup-ratio", type=float, default=0.015)
     p.add_argument("--max-grad-norm", type=float, default=0.5)
-    p.add_argument("--bf16", action="store_true", help="bf16 draft weights (default fp32)")
+    p.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16", help="draft weights (default bf16)")
+    p.add_argument("--no-grad-ckpt", action="store_true", help="disable gradient checkpointing")
     p.add_argument("--limit", type=int, default=None, help="use only the first N dump files per split (smoke test)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default=None)
     p.add_argument("--log-every", type=int, default=10)
     args = p.parse_args()
     train(args.dump_dir, args.out, args.vocab, args.epochs, args.lr, args.batch_size, args.accumulation,
-          args.warmup_ratio, args.max_grad_norm, args.bf16, args.limit, args.seed, args.log_every,
+          args.warmup_ratio, args.max_grad_norm, args.dtype == "bf16", not args.no_grad_ckpt, args.limit, args.seed, args.log_every,
           device=get_device(args.device))
 
 

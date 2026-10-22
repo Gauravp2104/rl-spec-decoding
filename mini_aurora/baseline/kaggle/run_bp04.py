@@ -11,7 +11,7 @@ the Qwen3-0.6B download. Everything worth keeping lands in ``/kaggle/working/bp0
     evaluate.json        standalone evaluation of the final checkpoint
     timings.json         wall-clock per stage
 
-Knobs via environment variables (set by push.py): BP04_EPOCHS (2), BP04_BF16 (0/1), BP04_LIMIT (all),
+Knobs via environment variables (set by push.py): BP04_EPOCHS (2), BP04_DTYPE (bf16/fp32), BP04_GRAD_CKPT (1/0), BP04_LIMIT (all),
 BP04_HELDOUT (100), BP04_BATCH (2), BP04_ACCUM (4).
 """
 
@@ -67,8 +67,9 @@ def main() -> None:
 
     train = [sys.executable, "-m", "mini_aurora.baseline.train", "--epochs", epochs,
              "--batch-size", os.environ.get("BP04_BATCH", "2"), "--accumulation", os.environ.get("BP04_ACCUM", "4")]
-    if os.environ.get("BP04_BF16", "0") == "1":
-        train.append("--bf16")
+    train += ["--dtype", os.environ.get("BP04_DTYPE", "bf16")]
+    if os.environ.get("BP04_GRAD_CKPT", "1") == "0":
+        train.append("--no-grad-ckpt")
     timings["train_s"] = run(train, **common_env)
 
     timings["evaluate_s"] = run([sys.executable, "-m", "mini_aurora.baseline.evaluate", "--out", "outputs/baseline/evaluate.json"], **common_env)
@@ -82,7 +83,8 @@ def main() -> None:
     step = int((ckpt / "latest.txt").read_text().strip())
     for ext in ("pt", "json"):
         shutil.copy(ckpt / f"draft_step{step:06d}.{ext}", OUT / f"draft_step{step:06d}.{ext}")
-    timings["epochs"], timings["limit"], timings["bf16"] = int(epochs), limit or None, os.environ.get("BP04_BF16", "0") == "1"
+    timings["epochs"], timings["limit"] = int(epochs), limit or None
+    timings["dtype"], timings["grad_ckpt"] = os.environ.get("BP04_DTYPE", "bf16"), os.environ.get("BP04_GRAD_CKPT", "1") == "1"
     (OUT / "timings.json").write_text(json.dumps(timings, indent=2))
     print(json.dumps(timings, indent=2))
     print(json.dumps(json.loads((OUT / "eval.json").read_text())["epochs"], indent=2))

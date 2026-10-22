@@ -18,7 +18,7 @@ python -m pytest -q mini_aurora/tests/test_baseline.py           # 3 unit tests 
 
 Smoke test of the whole path on a few conversations: `dump --limit 20`, then `train --limit 20 --epochs 1`.
 
-Needs BP-02's chat pool (`data/raw/chat.jsonl`) and vocab cache (`outputs/vocab/qwen3_16k_mixed.pt`), and BP-03's
+Needs BP-02's chat pool (`data/raw/chat.jsonl`) and vocab cache (`outputs/vocab/qwen3_24k_mixed.pt`), and BP-03's
 target / draft modules. The feature dump for 1000 conversations is ~4 GB in bf16 (PLAN.md budgets ~5 GB).
 
 ## What each module does
@@ -27,7 +27,7 @@ target / draft modules. The feature dump for 1000 conversations is ~4 GB in bf16
 |---|---|---|
 | `dump.py` | frozen target over each conversation once; saves `input_ids`, `loss_mask`, `aux_hidden_states` (layers 1/13/24), `hidden_states` (final norm) per conversation | offline data generation, `OfflineEagle3Dataset` keys |
 | `data.py` | dataset over the dump, right-padding collator → `Eagle3TargetOutput` + attention mask, so BP-03's `forward_step` is used unchanged | `DataCollatorWithPadding` |
-| `train.py` | AdamW, lr 1e-4, warmup 1.5% + cosine, grad clip 0.5, loss Σ 0.8ⁱ·ploss_i, batch 2 × accumulation 4; CSV log, per-epoch held-out eval and checkpoint | `Eagle3Trainer` + `TrainingConfig` defaults |
+| `train.py` | AdamW, lr 1e-4, warmup 1.5% + cosine, grad clip 0.5, loss Σ 0.8ⁱ·ploss_i, batch 2 × accumulation 4, bf16 draft + gradient checkpointing (BP-04 default, `--dtype fp32 --no-grad-ckpt` to disable); CSV log, per-epoch held-out eval and checkpoint | `Eagle3Trainer` + `TrainingConfig` defaults |
 | `checkpoint.py` | `draft_stepNNNNNN.pt` (trainable weights + `d2t`/`t2d` + metadata, embedding excluded) and `latest.txt`; `load_draft` rebuilds from the target | `checkpoint.py` tracker file |
 | `evaluate.py` | forward-only loss / accuracy per TTT position on a split | `eval_forward` |
 

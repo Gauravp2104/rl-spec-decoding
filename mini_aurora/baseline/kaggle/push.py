@@ -1,15 +1,15 @@
 """Run BP-04 on Kaggle's free T4 and pull the results back.
 
 1. Packages the repo source (mini_aurora/, aurora-main/aurora, examples/, pyproject files) together with
-   ``data/raw/chat.jsonl`` and ``outputs/vocab/`` into the private Kaggle dataset ``<user>/rl-spec-decoding-src``
+   ``data/raw/chat.jsonl`` and ``outputs/vocab/`` (24K mapping) into the private Kaggle dataset ``<user>/rl-spec-decoding-src``
    (kernels can attach datasets, not git branches).
 2. Pushes ``run_bp04.py`` as a private GPU script kernel ``<user>/rl-spec-decoding-bp04`` with internet on
    (Qwen3-0.6B download), polls until it finishes, then downloads ``/kaggle/working/bp04/`` into
    ``outputs/baseline/kaggle/``.
 
-    python mini_aurora/baseline/kaggle/push.py --user <kaggle user>                # full run: 2 epochs, fp32 draft
+    python mini_aurora/baseline/kaggle/push.py --user <kaggle user>                # full run: 2 epochs, bf16 + grad ckpt
     python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --limit 20     # smoke run
-    python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --bf16
+    python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --dtype fp32 --no-grad-ckpt
     python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --pull-only
 
 Needs the Kaggle CLI (``pip install kaggle``) authenticated via ~/.kaggle/kaggle.json or ~/.kaggle/access_token.
@@ -63,12 +63,12 @@ def push_source(user: str) -> str:
     return slug
 
 
-def push_kernel(user: str, src_slug: str, epochs: int, bf16: bool, limit: int | None) -> str:
+def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None) -> str:
     kid = f"{user}/{KERNEL}"
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         script = (HERE / "run_bp04.py").read_text()
-        env = {"BP04_EPOCHS": str(epochs), "BP04_BF16": "1" if bf16 else "0", "BP04_LIMIT": str(limit or "")}
+        env = {"BP04_EPOCHS": str(epochs), "BP04_DTYPE": dtype, "BP04_GRAD_CKPT": "1" if grad_ckpt else "0", "BP04_LIMIT": str(limit or "")}
         header = "import os\n" + "".join(f"os.environ[{k!r}] = {v!r}\n" for k, v in env.items())
         (d / "run_bp04.py").write_text(header + script)
         (d / "kernel-metadata.json").write_text(json.dumps({
@@ -117,14 +117,15 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--user", required=True, help="Kaggle username")
     ap.add_argument("--epochs", type=int, default=2)
-    ap.add_argument("--bf16", action="store_true", help="bf16 draft weights (default fp32)")
+    ap.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16", help="draft weights (default bf16)")
+    ap.add_argument("--no-grad-ckpt", action="store_true", help="disable gradient checkpointing")
     ap.add_argument("--limit", type=int, default=None, help="conversations to dump (smoke run)")
     ap.add_argument("--pull-only", action="store_true")
     a = ap.parse_args()
     kid = f"{a.user}/{KERNEL}"
     if not a.pull_only:
         slug = push_source(a.user)
-        kid = push_kernel(a.user, slug, a.epochs, a.bf16, a.limit)
+        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit)
         print("final:", wait(kid))
     pull(kid)
 
