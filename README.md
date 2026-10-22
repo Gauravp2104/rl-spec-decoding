@@ -2,6 +2,7 @@
 
 MSAI-635 Group 2 project: Gaurav Prakash, Sanjana Kommareddy, Simran Kharbanda.
 Proposal: [docs/MSAI635_project_proposal_Group2.pdf](docs/MSAI635_project_proposal_Group2.pdf).
+Concept explainers (architecture in plain language, with figures): [docs/concepts/](docs/concepts/README.md).
 
 ## What this is
 

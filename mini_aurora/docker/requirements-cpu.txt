@@ -1,0 +1,15 @@
+# Same set as mini_aurora/requirements-mac.txt minus torch (installed from the CPU wheel index).
+transformers==4.57.1
+datasets
+accelerate
+safetensors
+huggingface_hub
+omegaconf
+pydantic
+numba
+numpy<2.4
+tqdm
+psutil
+wandb
+matplotlib
+pytest
