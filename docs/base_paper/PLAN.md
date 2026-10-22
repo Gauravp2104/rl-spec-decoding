@@ -32,7 +32,7 @@ model/loss/data code, and replace only the infrastructure.
 | Setting | Paper | Mac |
 |---|---|---|
 | Target | Qwen3-8B / 4B | Qwen3-0.6B (stretch 1.7B) |
-| Draft | hidden 4096, 32K draft vocab | hidden 1024, 16K draft vocab (~40M trainable) |
+| Draft | hidden 4096, 32K draft vocab | hidden 1024, 24K draft vocab (~42M trainable) |
 | K / `ttt_length` | 5 / 5 | 5 / 3 |
 | `max_seq_length` / `max_new_tokens` | 2048 / 512 | 512–1024 / 128–256 |
 | Concurrency / micro-batch | 12 / 4 | 1–4 / 1–2 (+ grad accumulation 4) |
@@ -70,6 +70,8 @@ for the static baseline ~5 GB (optional — can be computed on the fly). **≈10
 (2.71 GB bf16), 98 ms / 69 ms per AdamW step; 34.2M trainable + 155.6M frozen (embedding) draft parameters.
 With real data (4 × 1025 tokens): **9.92 GB** fp32 / 8.24 GB bf16, 622 / 360 ms per step; 1 × 1025 fp32: 4.35 GB.
 So the 6–8 GB peak above only holds for batch ≤ 2 at 1K tokens (or with gradient checkpointing) — size BP-04 accordingly.
+**BP-04 setting (24K vocab):** 4 × 1025 tokens, 30 steps: fp32 9.92 GB / 720 ms; bf16 9.32 GB / 412 ms;
+**bf16 + gradient checkpointing 7.17 GB / 503 ms** (the BP-04 default).
 
 **Experiment disk:** ~0.5 GB per draft checkpoint (0.6B); ~6–18 GB for ~12 runs. **Total ≤ ~30 GB** (≤ ~50 GB with 1.7B).
 **Time:** ~12 runs × 1–3 h + development ≈ 30–50 Mac-hours. Run experiments sequentially, under `caffeinate -i`.
@@ -88,13 +90,13 @@ Merge order: **BP-01 → (BP-02, BP-03) → (BP-04, BP-05) → BP-06 → BP-07 �
 ### BP-02 — Data subsets and request streams (`bp/02-data-streams`)
 - Public replacements for Aurora's private mixed dataset: ShareGPT (`Aeala/ShareGPT_Vicuna_unfiltered`), CodeAlpaca, GSM8K; ~1K prompts per domain.
 - Emit **mixed** (shuffled), **ordered** (grouped by domain), **domain-shift** (chat→code→math) JSONL streams.
-- Reuse `qwen` chat template, `compute_assistant_loss_mask`, `generate_vocab_mapping` → 16K `d2t`/`t2d`.
+- Reuse `qwen` chat template, `compute_assistant_loss_mask`, `generate_vocab_mapping` → `d2t`/`t2d` (24K since BP-04; 16K covered only 97.6%).
 - **Done when:** three streams + cached vocab mapping on disk (CPU only).
 
 ### BP-03 — Target + EAGLE-3 draft on MPS (`bp/03-models-mps`)
 - Load Qwen3-0.6B via `HFTargetModel` (aux layers [1, 13, 24]).
-- `examples/mac-qwen3-0.6b/draft_config.json`: hidden 1024, 16 heads, 8 KV heads, intermediate 3072, 1 layer, `draft_vocab_size: 16000`.
-- `Eagle3Model(draft, length=3, attention_backend="sdpa")`; embedding copied from the target and frozen. The draft has its own trainable 16K-row `lm_head` (as in Aurora); the target `lm_head` only produces the training labels.
+- `examples/mac-qwen3-0.6b/draft_config.json`: hidden 1024, 16 heads, 8 KV heads, intermediate 3072, 1 layer, `draft_vocab_size: 24000` (16000 in BP-03).
+- `Eagle3Model(draft, length=3, attention_backend="sdpa")`; embedding copied from the target and frozen. The draft has its own trainable 24K-row `lm_head` (as in Aurora); the target `lm_head` only produces the training labels.
 - **Done when:** overfit test drives loss on one batch toward 0 in ~200 steps; step time and peak memory recorded.
 
 ### BP-04 — Offline static EAGLE-3 baseline (`bp/04-static-baseline`)

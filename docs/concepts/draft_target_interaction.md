@@ -50,14 +50,14 @@ flowchart TB
         DE["Embedding (copied, frozen)"]
         FC["fc: 3072 → 1024 (trained)"]
         DL["1 decoder layer + norm (trained)"]
-        DH["lm_head: 1024 → 16K (trained)<br/>own weights; d2t maps outputs to target IDs"]
+        DH["lm_head: 1024 → 24K (trained)<br/>own weights; d2t maps outputs to target IDs"]
     end
     TE -. "copied once" .-> DE
     TH -. "labels only (training)" .-> DH
 ```
 
 - The draft **copies** the target's embedding once and freezes it (155.6M parameters).
-- The draft has its **own** `lm_head` over the 16K most frequent tokens (`d2t` / `t2d`, BP-02; see
+- The draft has its **own** `lm_head` over the 24K most frequent tokens (`d2t` / `t2d`, BP-02 / BP-04; see
   [vocabulary.md](vocabulary.md)). The target's `lm_head` is never part of the draft; it only turns
   `last_hidden_states` into training labels.
 - Trained: `fc`, the decoder layer, `norm` and the draft `lm_head` (34.2M parameters).
@@ -74,7 +74,7 @@ flowchart LR
     FC --> J["concat<br/>2048"]
     EMB --> J
     J --> DL["Draft decoder layer"]
-    DL --> HEAD["lm_head<br/>16K draft vocab"]
+    DL --> HEAD["lm_head<br/>24K draft vocab"]
     HEAD --> G["Guessed token"]
     DL -- "draft hidden state<br/>(reused for guesses 2..K)" --> NEXT["Next draft step"]
 ```
@@ -123,7 +123,7 @@ flowchart LR
     S --> M["Loss mask<br/>(assistant tokens only)"]
     AUX --> DR["Draft, unrolled 3 TTT steps<br/>(length = 3)"]
     IDS --> DR
-    LH --> TH["Target lm_head<br/>→ softmax, pruned to 16K"]
+    LH --> TH["Target lm_head<br/>→ softmax, pruned to 24K"]
     DR --> Q["Draft predictions"]
     TH --> PT["Target probabilities<br/>(labels)"]
     Q --> L["Forward-KL loss"]
