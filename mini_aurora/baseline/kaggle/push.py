@@ -5,11 +5,11 @@
    (kernels can attach datasets, not git branches).
 2. Pushes ``run_bp04.py`` as a private GPU script kernel ``<user>/rl-spec-decoding-bp04`` with internet on
    (Qwen3-0.6B download), polls until it finishes, then downloads ``/kaggle/working/bp04/`` into
-   ``outputs/baseline/kaggle/``.
+   ``outputs/baseline/kaggle/<label>/`` (``--label``, default ``<dtype>[_ckpt]_<epochs>ep``; an existing folder is replaced).
 
-    python mini_aurora/baseline/kaggle/push.py --user <kaggle user>                # full run: 2 epochs, bf16 + grad ckpt
+    python mini_aurora/baseline/kaggle/push.py --user <kaggle user>                # full run: 2 epochs, fp32 draft + grad ckpt
     python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --limit 20     # smoke run
-    python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --dtype fp32 --no-grad-ckpt
+    python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --dtype bf16
     python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --pull-only
 
 Needs the Kaggle CLI (``pip install kaggle``) authenticated via ~/.kaggle/kaggle.json or ~/.kaggle/access_token.
@@ -94,8 +94,8 @@ def wait(kid: str, poll: int = 60) -> str:
         time.sleep(poll)
 
 
-def pull(kid: str) -> None:
-    out = ROOT / "outputs" / "baseline" / "kaggle"
+def pull(kid: str, label: str) -> None:
+    out = ROOT / "outputs" / "baseline" / "kaggle" / label
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     print(kaggle("kernels", "output", kid, "-p", str(out)).strip().splitlines()[-1])
@@ -117,17 +117,18 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--user", required=True, help="Kaggle username")
     ap.add_argument("--epochs", type=int, default=2)
-    ap.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16", help="draft weights (default bf16)")
+    ap.add_argument("--dtype", choices=["bf16", "fp32"], default="fp32", help="draft weights (default fp32)")
     ap.add_argument("--no-grad-ckpt", action="store_true", help="disable gradient checkpointing")
     ap.add_argument("--limit", type=int, default=None, help="conversations to dump (smoke run)")
     ap.add_argument("--pull-only", action="store_true")
+    ap.add_argument("--label", default=None, help="output folder under outputs/baseline/kaggle/")
     a = ap.parse_args()
     kid = f"{a.user}/{KERNEL}"
     if not a.pull_only:
         slug = push_source(a.user)
         kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit)
         print("final:", wait(kid))
-    pull(kid)
+    pull(kid, a.label or f"{a.dtype}{'' if a.no_grad_ckpt else '_ckpt'}_{a.epochs}ep{'_limit' + str(a.limit) if a.limit else ''}")
 
 
 if __name__ == "__main__":

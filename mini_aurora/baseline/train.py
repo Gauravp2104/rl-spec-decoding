@@ -2,13 +2,14 @@
 
     python -m mini_aurora.baseline.train                            # 2 epochs on outputs/baseline/hidden_states/train
     python -m mini_aurora.baseline.train --limit 20 --epochs 1       # smoke test
-    python -m mini_aurora.baseline.train --dtype fp32 --no-grad-ckpt --out outputs/baseline/checkpoints_fp32
+    python -m mini_aurora.baseline.train --dtype bf16 --out outputs/baseline/checkpoints_bf16
 
 Defaults follow Aurora's ``TrainingConfig`` where it applies: AdamW, lr 1e-4 (PLAN.md "scratch"), no weight
 decay, 1.5% linear warmup then cosine decay, grad clip 0.5, loss ``sum_i 0.8^i * ploss_i``, batch 2 with
 gradient accumulation 4 (PLAN.md micro-batch 1-2, accumulation 4). The draft starts from the target's
-embedding (frozen) and the cached 24K vocab mapping; everything else is random (day-0). Default draft setting is
-the BP-04 one from mini_aurora/models/README.md: bf16 weights with gradient checkpointing.
+embedding (frozen) and the cached 24K vocab mapping; everything else is random (day-0). Draft weights are fp32
+(Aurora keeps fp32 master weights under FSDP mixed precision; pure-bf16 AdamW trained worse, see README) with
+gradient checkpointing on, as in mini_aurora/models/README.md.
 
 Writes per-step metrics to ``<out>/train_log.csv``, a held-out evaluation per epoch to ``<out>/eval.json``,
 and a checkpoint per epoch (``mini_aurora.baseline.checkpoint``).
@@ -44,7 +45,7 @@ def train(
     accumulation: int = 4,
     warmup_ratio: float = 0.015,
     max_grad_norm: float = 0.5,
-    bf16: bool = True,
+    bf16: bool = False,
     gradient_checkpointing: bool = True,
     limit: int | None = None,
     seed: int = 0,
@@ -140,7 +141,7 @@ def main() -> None:
     p.add_argument("--accumulation", type=int, default=4)
     p.add_argument("--warmup-ratio", type=float, default=0.015)
     p.add_argument("--max-grad-norm", type=float, default=0.5)
-    p.add_argument("--dtype", choices=["bf16", "fp32"], default="bf16", help="draft weights (default bf16)")
+    p.add_argument("--dtype", choices=["bf16", "fp32"], default="fp32", help="draft weights (default fp32)")
     p.add_argument("--no-grad-ckpt", action="store_true", help="disable gradient checkpointing")
     p.add_argument("--limit", type=int, default=None, help="use only the first N dump files per split (smoke test)")
     p.add_argument("--seed", type=int, default=0)
