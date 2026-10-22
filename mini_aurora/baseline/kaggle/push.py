@@ -42,7 +42,7 @@ def kaggle(*args: str, check: bool = True) -> str:
 
 def push_source(user: str) -> str:
     slug = f"{user}/{DATASET}"
-    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info", "outputs", "data")
+    ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info")
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         shutil.copytree(ROOT / "mini_aurora", d / "mini_aurora", ignore=ignore)

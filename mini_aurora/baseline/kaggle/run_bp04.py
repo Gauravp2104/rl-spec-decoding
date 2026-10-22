@@ -25,7 +25,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working")
 OUT = WORK / "bp04"
-REPO = WORK / "repo"
+REPO = Path("/tmp/repo")  # outside /kaggle/working so the kernel output is only bp04/
 
 
 def find_source() -> Path:
@@ -58,7 +58,7 @@ def main() -> None:
     epochs = os.environ.get("BP04_EPOCHS", "2")
     limit = os.environ.get("BP04_LIMIT", "")
     heldout = os.environ.get("BP04_HELDOUT", "100")
-    common_env = {"MINI_AURORA_DEVICE": "cuda", "WANDB_MODE": "offline", "HF_HOME": str(WORK / "hf")}
+    common_env = {"MINI_AURORA_DEVICE": "cuda", "WANDB_MODE": "offline", "HF_HOME": "/tmp/hf"}
 
     dump = [sys.executable, "-m", "mini_aurora.baseline.dump", "--jsonl", "data/raw/chat.jsonl", "--heldout", heldout]
     if limit:
