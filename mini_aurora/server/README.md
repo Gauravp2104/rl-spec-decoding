@@ -32,7 +32,21 @@ Tracks #12. Branch: `bp/05-spec-server`.
   for the next draft. Returns `new_ids`, `accepted` per round (τ̄ = `mean_accepted`) and the draft version.
 - [x] **6. KV cache** (`use_cache=True`): the target keeps an HF `DynamicCache`, runs only the K + 1 new tokens
   per round and `crop()`s the cache back to the accepted length. The drafter stays cache-free.
-- [ ] 7. Logging  - [ ] 8. Training samples  - [ ] 9. Draft hot-swap  - [ ] 10. CLI + 50-prompt test
+- [x] **7. Logging** (`log.py`): one JSON line per request with `accepted` and `versions` per round, `k`, token
+  counts, time and tok/s (plus `domain`, stream `pos`, `match`). `acceptance_by_position()` gives α_i. τ̄, α_i and
+  staleness for BP-07 can all be recomputed from the log.
+- [x] **8. Training samples** (`speculative_generate(..., return_sample=True)`): an `Eagle3TargetOutput` laid out
+  as Aurora's `generate_with_decode`: prompt + completion minus its last token, their aux and final-norm states
+  (reused from the verify passes, so no extra target pass), loss mask on the completion. `forward_step` takes it
+  as-is; matches a fresh `capture_features` pass to 1e-3 in fp32.
+- [x] **9. Draft hot-swap** (`drafter.py`): `Drafter.load_weights(state, version, d2t)` copies a trainer's
+  `fc` / layer / `norm` / `lm_head` into the served draft in place (Aurora's `update_weights_from_disk`) and
+  refuses weights trained on another vocab mapping; `save_draft_weights()` / `Drafter.load_file()` do the same via
+  disk (~170 MB fp32). Every round logs the version that proposed it.
+- [x] **10. CLI + 50-prompt test** (`serve.py`): `serve()` runs stream requests one at a time (bs = 1), with optional
+  `check` against target-only greedy, a `RequestLog`, and an `on_sample` callback for BP-06; `summarize()` gives
+  τ̄ / α_i / tok/s per domain. `test_serve_50_prompts_lossless`: **50/50 token-identical** on the first 50 rows of
+  `data/streams/mixed.jsonl` (18 chat / 17 code / 15 math, 32 new tokens, fp32).
 
 **Alignment check** (`test_drafter_matches_training_alignment`): overfit a draft on a target-greedy sequence, then
 draft after every anchor. Hit rate is **1.0 / 1.0 / 1.0** for guesses 1–3 whenever the true tokens are in the
@@ -56,5 +70,11 @@ A useless draft is a slowdown (every round costs a draft + a verify pass for one
 The overfit draft has seen this answer, so this is an upper bound; BP-04's trained draft gives the real number.
 
 ```bash
-PYTORCH_ENABLE_MPS_FALLBACK=0 python -m pytest -q -s mini_aurora/tests/test_server.py   # 9 tests, ~35 s
+PYTORCH_ENABLE_MPS_FALLBACK=0 python -m pytest -q -s mini_aurora/tests/test_server.py   # 13 tests, ~2 min
+python -m mini_aurora.server.serve -n 50 --check                       # done-when; exits 1 on any mismatch
+python -m mini_aurora.server.serve -n 20 --draft outputs/drafts/static_chat.pt --log outputs/server/run.jsonl
+python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0 --bf16
 ```
+
+Until BP-04's draft exists, `serve` uses a day-0 draft: output is still exact, but τ̄ ≈ 0 and it runs at about
+half the target-only speed. BP-04's checkpoint plugs in with `--draft` (written by `save_draft_weights`).

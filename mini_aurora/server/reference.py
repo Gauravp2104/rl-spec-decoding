@@ -34,6 +34,14 @@ def encode_prompt(
     return tokenizer(build_chat_prompt(tokenizer, question, thinking), return_tensors="pt")["input_ids"].to(device)
 
 
+def encode_messages(tokenizer: PreTrainedTokenizer, messages: list, device: torch.device) -> torch.Tensor:
+    """A stream conversation as a request: every turn before the final assistant answer, plus the generation prompt."""
+    if messages and messages[-1]["role"] == "assistant":
+        messages = messages[:-1]
+    text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True, enable_thinking=False)
+    return tokenizer(text, return_tensors="pt")["input_ids"].to(device)
+
+
 def eos_token_ids(target: HFTargetModel) -> set[int]:
     """Token IDs that end generation (Qwen3: ``<|im_end|>`` and ``<|endoftext|>``)."""
     eos = target.model.generation_config.eos_token_id
