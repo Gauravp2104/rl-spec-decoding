@@ -4,7 +4,8 @@ How the **target** (Qwen3-0.6B, 28 layers, frozen) and the **EAGLE-3 draft** (1 
 work together in our implementation.
 
 > **Status (2026-10-19):** target loading, aux capture, the draft (shared weights, vocab buffers) and the
-> TTT forward/loss are implemented (`mini_aurora/models/`, BP-03). Serving and the online loop are the design for BP-05 – BP-06.
+> TTT forward/loss are implemented (`mini_aurora/models/`, BP-03). Serving is implemented in `mini_aurora/server/` (BP-05; see
+> [mini_inference_server.md](mini_inference_server.md)); the online loop is the design for BP-06.
 
 ## Classic speculative decoding vs. EAGLE
 

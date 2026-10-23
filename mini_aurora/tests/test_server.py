@@ -1,7 +1,10 @@
-"""BP-05 steps 1-6: reference, target step, chain drafter, verification, speculative loop with / without KV cache.
+"""BP-05 steps 1-10: reference, target step, drafter, verification, speculative loop (with / without KV cache),
+logging, training samples, draft hot-swap, and the 50-prompt losslessness check on the BP-02 stream.
 
 Run in fp32 (target and draft) so greedy speculative output can be compared token for token with ``generate``.
 """
+
+from pathlib import Path
 
 import pytest
 import torch
@@ -11,8 +14,10 @@ from transformers import DynamicCache
 from mini_aurora.models.draft import build_draft, forward_step, target_lm_head_weight, weighted_loss, wrap_eagle3
 from mini_aurora.models.target import DEFAULT_TARGET, capture_features, load_target, load_tokenizer
 from mini_aurora.models.vocab import load_vocab_mapping
-from mini_aurora.server.drafter import Drafter
+from mini_aurora.server.drafter import Drafter, save_draft_weights, trainable_state
+from mini_aurora.server.log import RequestLog, acceptance_by_position, read_log, request_record
 from mini_aurora.server.reference import encode_prompt, eos_token_ids, reference_generate
+from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve, summarize
 from mini_aurora.server.spec_decode import speculative_generate
 from mini_aurora.server.target_step import target_forward
 from mini_aurora.server.verify import verify_greedy, verify_sampling
@@ -190,3 +195,78 @@ def test_speculative_sampling(setup, trained):
     assert torch.equal(a.new_ids, b.new_ids) and a.accepted == b.accepted  # reproducible with a seed
     assert 0 < a.new_ids.numel() <= 32
     assert all(0 <= x <= 3 for x in a.accepted)
+
+
+def test_log_records(setup, trained, tmp_path):
+    target, _, prompt, _ = setup
+    out = speculative_generate(target, Drafter(trained[0], k=3, version=7), prompt, max_new_tokens=48)
+    record = request_record(out, "req-0", domain="chat", pos=0)
+    assert record["accepted"] == out.accepted and set(record["versions"]) == {7}
+    assert record["new_tokens"] == out.new_ids.numel() and record["rounds"] == len(out.accepted)
+    with RequestLog(tmp_path / "log.jsonl") as log:
+        log.write(record)
+        log.write(record)
+    assert read_log(tmp_path / "log.jsonl") == [record, record]
+    alpha = acceptance_by_position([record])
+    assert len(alpha) == 3 and alpha[0] >= alpha[1] >= alpha[2]
+    assert alpha[0] == sum(a >= 1 for a in out.accepted) / len(out.accepted)
+
+
+def test_training_sample_matches_capture(setup, trained):
+    """The sample reuses the verify passes' states; they must equal a fresh target pass over the same tokens."""
+    target, _, prompt, ref = setup
+    draft = trained[0]
+    out = speculative_generate(target, Drafter(draft, k=3), prompt, max_new_tokens=48, return_sample=True)
+    sample, m = out.sample, out.new_ids.numel()
+    assert sample.input_ids.shape == (1, prompt.shape[1] + m - 1)
+    assert torch.equal(sample.input_ids[0, prompt.shape[1] :], out.new_ids[:-1])
+    assert int(sample.loss_mask.sum()) == m - 1 and not sample.loss_mask[0, : prompt.shape[1]].any()
+
+    fresh = capture_features(target, sample.input_ids, sample.loss_mask)
+    assert torch.allclose(sample.hidden_states, fresh.hidden_states, atol=1e-3)
+    assert torch.allclose(sample.last_hidden_states, fresh.last_hidden_states, atol=1e-3)
+    # Usable as-is by the trainer (BP-06).
+    plosses, _ = forward_step(wrap_eagle3(draft), sample, target_lm_head_weight(target))
+    assert all(torch.isfinite(loss) for loss in plosses)
+
+
+def test_hot_swap(setup, trained, tmp_path):
+    target, vocab, prompt, ref = setup
+    served = Drafter(build_draft(target, vocab, dtype=torch.float32), k=3)  # day-0, version 0
+    before = speculative_generate(target, served, prompt, max_new_tokens=48)
+    assert before.mean_accepted < 0.5 and set(before.versions) == {0}
+
+    trainer_draft = trained[0]
+    served.load_weights(trainable_state(trainer_draft), version=1, d2t=trainer_draft.d2t)
+    after = speculative_generate(target, served, prompt, max_new_tokens=48)
+    assert torch.equal(after.new_ids, ref.new_ids) and set(after.versions) == {1}
+    assert after.mean_accepted > 2.0
+
+    # The served copy is independent of the trainer's weights.
+    assert served.draft.fc.weight.data_ptr() != trainer_draft.fc.weight.data_ptr()
+
+    # Round trip through a file, and refuse weights trained with another vocab mapping.
+    path = save_draft_weights(trainer_draft, tmp_path / "draft.pt", version=2)
+    fresh = Drafter(build_draft(target, vocab, dtype=torch.float32), k=3)
+    fresh.load_file(path)
+    assert fresh.version == 2 and torch.equal(fresh.draft.lm_head.weight, trainer_draft.lm_head.weight)
+    with pytest.raises(ValueError, match="vocab mapping"):
+        fresh.load_weights(trainable_state(trainer_draft), 3, d2t=torch.roll(trainer_draft.d2t, 1))
+
+
+@pytest.mark.skipif(not Path(DEFAULT_STREAM).exists(), reason="BP-02 stream missing (python -m mini_aurora.data.streams)")
+def test_serve_50_prompts_lossless(setup, trained):
+    """BP-05 done-when: greedy speculative output == model.generate on 50 stream prompts (bs = 1, fp32)."""
+    target, _, _, _ = setup
+    rows = load_requests(DEFAULT_STREAM, 50)
+    samples = []
+    records = serve(
+        target, Drafter(trained[0], k=3), load_tokenizer(), rows, max_new_tokens=32, check=True,
+        on_sample=samples.append,
+    )
+    summary = summarize(records)
+    print("50-prompt summary", summary)
+    assert [r["request_id"] for r in records] == [r["id"] for r in rows]
+    assert all(r["match"] for r in records), [r["request_id"] for r in records if not r["match"]]
+    assert summary["all"]["matches"] == "50/50" and len(samples) == 50
+    assert {"chat", "code", "math"} <= set(summary)
