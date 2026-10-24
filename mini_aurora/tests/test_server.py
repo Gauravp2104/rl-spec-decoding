@@ -14,10 +14,11 @@ from transformers import DynamicCache
 from mini_aurora.models.draft import build_draft, forward_step, target_lm_head_weight, weighted_loss, wrap_eagle3
 from mini_aurora.models.target import DEFAULT_TARGET, capture_features, load_target, load_tokenizer
 from mini_aurora.models.vocab import load_vocab_mapping
-from mini_aurora.server.drafter import Drafter, save_draft_weights, trainable_state
+from mini_aurora.baseline.checkpoint import save_draft
+from mini_aurora.server.drafter import Drafter, trainable_state
 from mini_aurora.server.log import RequestLog, acceptance_by_position, read_log, request_record
 from mini_aurora.server.reference import encode_prompt, eos_token_ids, reference_generate
-from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve, summarize
+from mini_aurora.server.serve import DEFAULT_STREAM, heldout_ids, load_requests, serve, summarize
 from mini_aurora.server.spec_decode import speculative_generate
 from mini_aurora.server.target_step import target_forward
 from mini_aurora.server.verify import verify_greedy, verify_sampling
@@ -245,13 +246,35 @@ def test_hot_swap(setup, trained, tmp_path):
     # The served copy is independent of the trainer's weights.
     assert served.draft.fc.weight.data_ptr() != trainer_draft.fc.weight.data_ptr()
 
-    # Round trip through a file, and refuse weights trained with another vocab mapping.
-    path = save_draft_weights(trainer_draft, tmp_path / "draft.pt", version=2)
+    # Round trip through a BP-04 checkpoint (file and directory); the step becomes the version.
+    path = save_draft(trainer_draft, tmp_path / "ckpt", step=2)
     fresh = Drafter(build_draft(target, vocab, dtype=torch.float32), k=3)
-    fresh.load_file(path)
+    assert fresh.load_file(path) == path
     assert fresh.version == 2 and torch.equal(fresh.draft.lm_head.weight, trainer_draft.lm_head.weight)
-    with pytest.raises(ValueError, match="vocab mapping"):
+    save_draft(trainer_draft, tmp_path / "ckpt", step=5)
+    assert fresh.load_file(tmp_path / "ckpt").name == "draft_step000005.pt" and fresh.version == 5
+    with pytest.raises(FileNotFoundError):
+        fresh.load_file(tmp_path)
+
+    # Refuse weights trained with another vocab mapping.
+    with pytest.raises(ValueError, match="d2t differs"):
         fresh.load_weights(trainable_state(trainer_draft), 3, d2t=torch.roll(trainer_draft.d2t, 1))
+    with pytest.raises(ValueError, match="t2d differs"):
+        fresh.load_weights(trainable_state(trainer_draft), 3, t2d=torch.roll(trainer_draft.t2d, 1))
+    other = torch.load(path, weights_only=False)
+    other["t2d"] = torch.roll(other["t2d"], 1)
+    torch.save(other, tmp_path / "other.pt")
+    with pytest.raises(ValueError, match="vocab mapping"):
+        fresh.load_file(tmp_path / "other.pt")
+
+
+@pytest.mark.skipif(not Path(DEFAULT_STREAM).exists(), reason="BP-02 stream missing (python -m mini_aurora.data.streams)")
+def test_heldout_requests():
+    """--heldout serves exactly BP-04's held-out chat conversations (the 100 the static draft never saw)."""
+    ids = heldout_ids()
+    assert len(ids) == 100 and all(i.startswith("chat-") for i in ids)
+    rows = load_requests(DEFAULT_STREAM, 1000, ids=ids)
+    assert len(rows) == 100 and {r["id"] for r in rows} == ids
 
 
 @pytest.mark.skipif(not Path(DEFAULT_STREAM).exists(), reason="BP-02 stream missing (python -m mini_aurora.data.streams)")

@@ -1,11 +1,14 @@
 """Serve requests from a BP-02 stream with speculative decoding (BP-05 step 10).
 
     python -m mini_aurora.server.serve -n 50 --check                     # done-when: greedy == generate on 50
-    python -m mini_aurora.server.serve -n 20 --draft outputs/drafts/static_chat.pt --log outputs/server/run.jsonl
+    python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints --check   # BP-04 τ̄
+    python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints --log outputs/server/run.jsonl
     python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0
 
 Each request is a stream conversation minus its final assistant answer (``encode_messages``). Without
-``--draft`` the draft is day-0 (random), which is correct but accepts ~nothing. Target and draft run in fp32 by
+``--draft`` the draft is day-0 (random), which is correct but accepts ~nothing. ``--draft`` takes a BP-04
+checkpoint file or directory (``outputs/baseline/checkpoints``, resolved through ``latest.txt``); ``--heldout``
+keeps only the chat conversations BP-04 never trained on (the same split as ``mini_aurora.baseline.dump``). Target and draft run in fp32 by
 default, as the losslessness check needs; ``--bf16`` is faster but can flip near-tied argmaxes.
 """
 
@@ -18,6 +21,10 @@ from pathlib import Path
 
 import torch
 
+from mini_aurora.baseline import HELDOUT
+from mini_aurora.baseline.dump import DEFAULT_JSONL as CHAT_POOL
+from mini_aurora.baseline.dump import split_rows
+from mini_aurora.data.download import read_jsonl
 from mini_aurora.device import get_device
 from mini_aurora.models.draft import build_draft
 from mini_aurora.models.target import load_target, load_tokenizer
@@ -30,13 +37,18 @@ from mini_aurora.server.spec_decode import speculative_generate
 DEFAULT_STREAM = "data/streams/mixed.jsonl"
 
 
-def load_requests(path: str | Path, n: int, domain: str | None = None) -> list[dict]:
-    """First ``n`` stream rows (``id``, ``domain``, ``pos``, ``messages``), optionally from one domain."""
+def heldout_ids(pool: str | Path = CHAT_POOL, heldout: int = HELDOUT) -> set[str]:
+    """IDs of the chat conversations BP-04 held out of training (the last ``heldout`` rows of the pool)."""
+    return {row["id"] for row in split_rows(read_jsonl(Path(pool)), heldout)["heldout"]}
+
+
+def load_requests(path: str | Path, n: int, domain: str | None = None, ids: set[str] | None = None) -> list[dict]:
+    """First ``n`` stream rows (``id``, ``domain``, ``pos``, ``messages``), optionally from one domain / ID set."""
     rows = []
     with open(path) as f:
         for line in f:
             row = json.loads(line)
-            if domain is None or row["domain"] == domain:
+            if (domain is None or row["domain"] == domain) and (ids is None or row["id"] in ids):
                 rows.append(row)
                 if len(rows) == n:
                     break
@@ -127,7 +139,8 @@ def main() -> None:
     parser.add_argument("--stream", default=DEFAULT_STREAM)
     parser.add_argument("-n", type=int, default=50, help="number of requests")
     parser.add_argument("--domain", default=None, choices=["chat", "code", "math"])
-    parser.add_argument("--draft", default=None, help="weights from save_draft_weights (default: day-0 draft)")
+    parser.add_argument("--heldout", action="store_true", help="only chat requests BP-04 never trained on")
+    parser.add_argument("--draft", default=None, help="BP-04 checkpoint file or directory (default: day-0 draft)")
     parser.add_argument("--vocab", default=DEFAULT_VOCAB)
     parser.add_argument("-k", type=int, default=3, help="guesses per round")
     parser.add_argument("--max-new-tokens", type=int, default=128)
@@ -146,8 +159,11 @@ def main() -> None:
     target, tokenizer = load_target(device=device, dtype=dtype), load_tokenizer()
     drafter = Drafter(build_draft(target, load_vocab_mapping(args.vocab), device=device, dtype=dtype), k=args.k)
     if args.draft:
-        drafter.load_file(args.draft)
-    rows = load_requests(args.stream, args.n, args.domain)
+        print(f"draft {drafter.load_file(args.draft)} (version {drafter.version})")
+    ids = heldout_ids() if args.heldout else None
+    rows = load_requests(args.stream, args.n, args.domain, ids)
+    if args.heldout:
+        print(f"{len(rows)} held-out chat requests")
 
     log = RequestLog(args.log) if args.log else None
     try:

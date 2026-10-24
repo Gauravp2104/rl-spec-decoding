@@ -180,13 +180,15 @@ sequenceDiagram
 - Only the trained parts move (`fc`, decoder layer, `norm`, `lm_head`); the frozen embedding and vocab mapping stay.
 - Weights trained with a different vocab mapping are refused (they would emit wrong token IDs).
 - The served draft is a separate copy, so trainer steps never change it mid-round.
-- Via disk: `save_draft_weights()` writes ~170 MB (fp32), `Drafter.load_file()` reads it.
+- Via disk: BP-04's `save_draft()` writes a checkpoint (~170 MB fp32, step = version); `Drafter.load_file()`
+  reads it, or a checkpoint directory through its `latest.txt`.
 
 ## Running it (step 10)
 
 ```bash
 python -m mini_aurora.server.serve -n 50 --check                      # BP-05 done-when; exits 1 on a mismatch
-python -m mini_aurora.server.serve -n 20 --draft outputs/drafts/static_chat.pt --log outputs/server/run.jsonl
+python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints --check   # BP-04 τ̄
+python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints --log outputs/server/run.jsonl
 python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0 --bf16
 ```
 

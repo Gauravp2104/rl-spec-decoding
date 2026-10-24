@@ -16,6 +16,8 @@ ignored: cache-free, simple and correct first (BP-05 step 5); a KV cache comes l
 Hot-swap (step 9): ``Drafter.load_weights`` copies a trainer's new weights into the served draft in place and
 bumps ``version``; the loop reads the version every round, so logs show which draft proposed each guess
 (staleness in BP-06). The served draft is its own copy: later trainer steps don't leak into it.
+``Drafter.load_file`` reads BP-04's checkpoint format (``mini_aurora.baseline.checkpoint.save_draft``), the one
+format for draft weights on disk; the checkpoint's ``step`` becomes the version.
 """
 
 from dataclasses import dataclass
@@ -23,7 +25,11 @@ from pathlib import Path
 
 import torch
 
-from aurora.models.draft.base import Eagle3DraftModel
+from mini_aurora.baseline.checkpoint import latest_checkpoint
+
+from aurora.models.draft.base import Eagle3DraftModel  # noqa: I001
+
+VOCAB_BUFFERS = ("d2t", "t2d")
 
 
 @dataclass
@@ -42,14 +48,22 @@ class Drafter:
         self.version = version
 
     @torch.no_grad()
-    def load_weights(self, state: dict[str, torch.Tensor], version: int, d2t: torch.Tensor | None = None) -> None:
+    def load_weights(
+        self,
+        state: dict[str, torch.Tensor],
+        version: int,
+        d2t: torch.Tensor | None = None,
+        t2d: torch.Tensor | None = None,
+    ) -> None:
         """Replace the trainable weights (``fc``, decoder layer, ``norm``, ``lm_head``) with ``state``.
 
         Aurora's ``update_weights_from_disk``. The frozen embedding and the vocab mapping stay; if the sender's
-        ``d2t`` is given it must match, since a draft trained on another mapping would emit wrong IDs.
+        ``d2t`` / ``t2d`` are given they must match, since a draft trained on another mapping would emit wrong IDs.
         """
-        if d2t is not None and not torch.equal(d2t.to(self.draft.d2t.device), self.draft.d2t):
-            raise ValueError("Draft weights were trained with a different vocab mapping")
+        for name, theirs in (("d2t", d2t), ("t2d", t2d)):
+            ours = getattr(self.draft, name)
+            if theirs is not None and not torch.equal(theirs.to(ours.device), ours):
+                raise ValueError(f"Draft weights were trained with a different vocab mapping ({name} differs)")
         params = dict(self.draft.named_parameters())
         expected = set(trainable_state(self.draft))
         if set(state) != expected:
@@ -58,10 +72,25 @@ class Drafter:
             params[name].copy_(value)
         self.version = version
 
-    def load_file(self, path: str | Path) -> None:
-        """Hot-swap from a file written by ``save_draft_weights``."""
-        ckpt = torch.load(path, map_location=self.draft.d2t.device)
-        self.load_weights(ckpt["state_dict"], ckpt["version"], ckpt.get("d2t"))
+    def load_file(self, path: str | Path) -> Path:
+        """Hot-swap from a BP-04 checkpoint file, or a checkpoint directory (its ``latest.txt``).
+
+        The format is ``{"state_dict", "d2t", "t2d", "step", "meta"}`` from ``save_draft``; ``state_dict`` holds
+        the trainable weights plus the vocab buffers, which are checked against the served draft, not loaded.
+        Returns the file that was loaded.
+        """
+        path = Path(path)
+        if path.is_dir():
+            resolved = latest_checkpoint(path)
+            if resolved is None:
+                raise FileNotFoundError(f"no latest.txt in {path}")
+            path = resolved
+        ckpt = torch.load(path, map_location=self.draft.d2t.device, weights_only=False)
+        state = {k: v for k, v in ckpt["state_dict"].items() if k not in VOCAB_BUFFERS}
+        d2t = ckpt.get("d2t", ckpt["state_dict"].get("d2t"))
+        t2d = ckpt.get("t2d", ckpt["state_dict"].get("t2d"))
+        self.load_weights(state, ckpt.get("version", ckpt["step"]), d2t, t2d)
+        return path
 
     def to_target_ids(self, draft_ids: torch.Tensor) -> torch.Tensor:
         """Draft-vocab IDs → target IDs (``target_id = draft_id + d2t[draft_id]``)."""
@@ -132,11 +161,3 @@ def trainable_state(draft: Eagle3DraftModel) -> dict[str, torch.Tensor]:
     """The weights a trainer updates and the server swaps in (not the frozen embedding or the vocab buffers)."""
     return {name: p.detach() for name, p in draft.named_parameters() if p.requires_grad}
 
-
-def save_draft_weights(draft: Eagle3DraftModel, path: str | Path, version: int) -> Path:
-    """Write ``{"version", "state_dict", "d2t"}`` for ``Drafter.load_file`` (~170 MB fp32 at 24K vocab)."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    state = {name: t.cpu() for name, t in trainable_state(draft).items()}
-    torch.save({"version": version, "state_dict": state, "d2t": draft.d2t.cpu()}, path)
-    return path

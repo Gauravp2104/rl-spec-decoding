@@ -41,8 +41,9 @@ Tracks #12. Branch: `bp/05-spec-server`.
   as-is; matches a fresh `capture_features` pass to 1e-3 in fp32.
 - [x] **9. Draft hot-swap** (`drafter.py`): `Drafter.load_weights(state, version, d2t)` copies a trainer's
   `fc` / layer / `norm` / `lm_head` into the served draft in place (Aurora's `update_weights_from_disk`) and
-  refuses weights trained on another vocab mapping; `save_draft_weights()` / `Drafter.load_file()` do the same via
-  disk (~170 MB fp32). Every round logs the version that proposed it.
+  refuses weights trained on another vocab mapping (`d2t` or `t2d` differs); `Drafter.load_file()` reads a BP-04
+  checkpoint (`mini_aurora.baseline.checkpoint.save_draft`, the one on-disk format) or a checkpoint directory via
+  `latest.txt`, and uses its `step` as the version. Every round logs the version that proposed it.
 - [x] **10. CLI + 50-prompt test** (`serve.py`): `serve()` runs stream requests one at a time (bs = 1), with optional
   `check` against target-only greedy, a `RequestLog`, and an `on_sample` callback for BP-06; `summarize()` gives
   τ̄ / α_i / tok/s per domain. `test_serve_50_prompts_lossless`: **50/50 token-identical** on the first 50 rows of
@@ -72,9 +73,11 @@ The overfit draft has seen this answer, so this is an upper bound; BP-04's train
 ```bash
 PYTORCH_ENABLE_MPS_FALLBACK=0 python -m pytest -q -s mini_aurora/tests/test_server.py   # 13 tests, ~2 min
 python -m mini_aurora.server.serve -n 50 --check                       # done-when; exits 1 on any mismatch
-python -m mini_aurora.server.serve -n 20 --draft outputs/drafts/static_chat.pt --log outputs/server/run.jsonl
+python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints --check   # BP-04 τ̄
+python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints --log outputs/server/run.jsonl
 python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0 --bf16
 ```
 
 Until BP-04's draft exists, `serve` uses a day-0 draft: output is still exact, but τ̄ ≈ 0 and it runs at about
-half the target-only speed. BP-04's checkpoint plugs in with `--draft` (written by `save_draft_weights`).
+half the target-only speed. BP-04's checkpoint plugs in with `--draft outputs/baseline/checkpoints`; `--heldout` serves only the 100 chat
+conversations BP-04 never trained on (its done-when: τ̄ clearly > 0 there).
