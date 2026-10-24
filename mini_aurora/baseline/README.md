@@ -2,7 +2,7 @@
 
 Tracks #10. Branch: `bp/04-static-baseline`.
 
-- No public EAGLE-3 draft for 0.6B, so train one: dump target hidden states on the **chat-only** split (mirrors `OfflineEagle3Dataset`), train 1–2 epochs, freeze.
+- No public EAGLE-3 draft for 0.6B, so train one: dump target hidden states on the **chat-only** split (mirrors `OfflineEagle3Dataset`), train 1–2 epochs, freeze (recorded baseline: 8 epochs, see Results).
 - This checkpoint is both the *static* baseline and the init for *with-draft* mode.
 - **Done when:** τ̄ clearly > 0 on held-out chat data in BP-05's loop.
 
@@ -61,3 +61,61 @@ Timings (fp32 run): install 16 s, dump 373 s (~1,260 tokens/s), train 470 s, eva
   updates below ~0.4% of a weight's magnitude round away at lr 1e-4; Aurora avoids this by keeping fp32 master
   weights under FSDP mixed precision. Hence fp32 is the default here; the memory saving from bf16 is 0.6 GB.
 - The checkpoint is the day-0 draft for BP-05 / BP-06. τ̄ (the done-when number) needs BP-05's loop.
+
+### 8 epochs on MPS: the static baseline
+
+Same data, vocab and settings on the M5 Pro (24 GB, MPS, fp32 draft, gradient checkpointing), `--epochs 8` =
+896 optimizer steps; the warmup + cosine schedule stretches over the longer run. A 2-epoch MPS run reproduces the
+T4 numbers above (held-out acc 0.171 → 0.192), so the two devices agree.
+
+```bash
+python -m mini_aurora.baseline.dump                                              # 70 s on MPS (900 + 100 conversations)
+caffeinate -i python -m mini_aurora.baseline.train --epochs 8 --out outputs/baseline/checkpoints_8ep   # 19.4 min
+python -m mini_aurora.baseline.evaluate --ckpt outputs/baseline/checkpoints_8ep/draft_step000896.pt
+```
+
+| epoch | step | held-out loss (pos 1 / 2 / 3) | held-out acc (pos 1 / 2 / 3) |
+|---|---|---|---|
+| 1 | 112 | 6.46 / 6.72 / 6.85 | 0.183 / 0.138 / 0.119 |
+| 2 | 224 | 5.75 / 5.96 / 6.11 | 0.245 / 0.209 / 0.191 |
+| 3 | 336 | 5.39 / 5.61 / 5.77 | 0.274 / 0.239 / 0.217 |
+| 4 | 448 | 5.19 / 5.43 / 5.58 | 0.292 / 0.254 / 0.232 |
+| 5 | 560 | 5.07 / 5.31 / 5.47 | 0.302 / 0.263 / 0.241 |
+| 6 | 672 | 5.00 / 5.25 / 5.41 | 0.308 / 0.268 / 0.245 |
+| 7 | 784 | 4.98 / 5.23 / 5.39 | 0.310 / 0.270 / 0.247 |
+| **8** | **896** | **4.98 / 5.22 / 5.38** | **0.310 / 0.270 / 0.248** |
+
+Median step 1.25 s, peak allocated memory 2.4 GB; train accuracy at the end 0.33 / 0.29 / 0.27.
+
+- Held-out position-1 accuracy rises from 0.192 (2 epochs) to **0.310** and flattens after epoch 6, partly because
+  the cosine schedule has decayed the learning rate to ~0 by then. Train is only ~2 points above held-out, so this
+  is still not overfitting.
+- Epoch 2 of this run (0.245) beats the 2-epoch run's final (0.192) at the same step count: with a longer schedule
+  the learning rate stays higher for longer.
+
+### Live acceptance on held-out chat (BP-05): done-when
+
+BP-05's server (`bp/05-spec-server`) on the 100 held-out chat conversations (`chat-00900` … `chat-00999`), greedy,
+K = 3, fp32 target and draft, up to 128 new tokens, with the target-only comparison:
+
+```bash
+python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints_8ep --check \
+    --log outputs/server/heldout_checkpoints_8ep.jsonl
+```
+
+| draft | τ̄ | α1 / α2 / α3 | tokens per target pass | tok/s (speculative vs target only) | lossless |
+|---|---|---|---|---|---|
+| 2 epochs (step 224) | 0.181 | 0.164 / 0.016 / 0.001 | 1.19 | 29.1 vs 54.9 (×0.53) | 100/100 |
+| **8 epochs (step 896)** | **0.313** | **0.242 / 0.058 / 0.013** | **1.32** | **32.1 vs 54.8 (×0.59)** | **100/100** |
+
+τ̄ = mean guesses accepted per round; α_i = share of rounds whose first i guesses were all accepted.
+
+- **Done-when met:** τ̄ is clearly > 0 (0.31), and every output is token-identical to target-only greedy decoding.
+- **The 8-epoch checkpoint (`checkpoints_8ep/draft_step000896.pt`) is the static baseline** for BP-06 (with-draft
+  start) and BP-08 (E2 / E3). It is frozen from here on.
+- Acceptance collapses after the first guess (α2 = 0.06): a chain stops at the first miss, and guesses 2–3 are
+  built on the draft's own hidden states. Teacher-forced accuracy (0.31 / 0.27 / 0.25) overstates live acceptance
+  because it scores each position given the *true* previous tokens.
+- Serving is still **slower** than the target alone (×0.59): a round takes ~41 ms (~2.3 target-only steps of
+  18 ms) but yields 1.32 tokens. Breaking even needs τ̄ ≈ 1.3 at this round cost, and the static draft won't get
+  there on its own; online training (BP-06) and a cheaper round (draft KV cache) are the levers.

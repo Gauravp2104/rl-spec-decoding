@@ -103,6 +103,10 @@ Merge order: **BP-01 → (BP-02, BP-03) → (BP-04, BP-05) → BP-06 → BP-07 �
 - No public EAGLE-3 draft for 0.6B, so train one: dump target hidden states on the **chat-only** split (mirrors `OfflineEagle3Dataset`), train 1–2 epochs, freeze.
 - This checkpoint is both the *static* baseline and the init for *with-draft* mode.
 - **Done when:** τ̄ clearly > 0 on held-out chat data in BP-05's loop.
+- **Result (2026-10-24, MPS):** static baseline = **8 epochs** (896 steps, `checkpoints_8ep/draft_step000896.pt`):
+  held-out acc 0.310 / 0.270 / 0.248; on the 100 held-out chat requests in BP-05's loop **τ̄ = 0.313**
+  (α 0.242 / 0.058 / 0.013), 100/100 lossless, ×0.59 target-only speed. 2 epochs gave τ̄ = 0.181.
+  Details: `mini_aurora/baseline/README.md`.
 
 ### BP-05 — Mini speculative-decoding server (`bp/05-spec-server`)
 - Chain drafting (topk=1, K steps): `fc(concat(3 aux hidden states)) + embed(next token)`, then draft's own hidden states for later steps.
