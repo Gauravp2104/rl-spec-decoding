@@ -41,7 +41,7 @@ One JSON object per line, the full conversation plus tags:
 
 - `messages` is role/content, starts with `user`, alternates, and ends on an `assistant` turn, which is what
   Aurora's `GeneralParser` requires (it truncates anything else, silently).
-- The **server** (BP-05) takes the first user turn as the request. The **offline baseline** (BP-04) and the
+- The **server** (BP-05) takes every turn before the final assistant answer as the request (`encode_messages`). The **offline baseline** (BP-04) and the
   **vocab mapping** use the assistant turns. Keeping the whole conversation in one file serves all three.
 - `n_tokens` is the length of the Qwen3 chat-templated conversation; `pos` is the index within a stream.
 - `python -m mini_aurora.models.overfit --stream ... --domain ...` (BP-03) reads this format directly (`messages` key).

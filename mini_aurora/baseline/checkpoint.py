@@ -37,9 +37,19 @@ def latest_checkpoint(ckpt_dir: str | Path) -> Path | None:
     return Path(ckpt_dir) / f"draft_step{int(tracker.read_text().strip()):06d}.pt"
 
 
+def checkpoint_dtype(ckpt: dict) -> torch.dtype:
+    """The dtype the draft was trained in: that of its saved (floating-point) weights."""
+    return next(v.dtype for v in ckpt["state_dict"].values() if v.is_floating_point())
+
+
 def load_draft(target, path: str | Path, device: torch.device | None = None, dtype: torch.dtype | None = None):
-    """Rebuild the draft from ``target`` and load the checkpoint at ``path``. Returns ``(draft, checkpoint)``."""
+    """Rebuild the draft from ``target`` and load the checkpoint at ``path``. Returns ``(draft, checkpoint)``.
+
+    ``dtype`` defaults to the checkpoint's own dtype (fp32 for the default training run), so a reload evaluates
+    the same weights that were trained rather than a bf16 rounding of them.
+    """
     ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    dtype = dtype or checkpoint_dtype(ckpt)
     draft = build_draft(target, (ckpt["d2t"], ckpt["t2d"]), device=device, dtype=dtype)
     missing, unexpected = draft.load_state_dict(ckpt["state_dict"], strict=False)
     missing = [k for k in missing if not k.startswith(EMBED_PREFIX)]

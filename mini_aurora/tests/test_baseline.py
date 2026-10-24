@@ -57,7 +57,7 @@ def test_dump_train_evaluate_smoke(tmp_path):
     from mini_aurora.baseline.train import train
     from mini_aurora.data.download import write_jsonl
     from mini_aurora.device import get_device, get_dtype
-    from mini_aurora.models.draft import build_draft, target_lm_head_weight, wrap_eagle3
+    from mini_aurora.models.draft import target_lm_head_weight, wrap_eagle3
     from mini_aurora.models.samples import SAMPLE_CONVERSATIONS
     from mini_aurora.models.target import load_target, load_tokenizer
     from mini_aurora.models.vocab import build_vocab_mapping, save_vocab_mapping
@@ -80,8 +80,9 @@ def test_dump_train_evaluate_smoke(tmp_path):
 
     device = get_device()
     path = latest_checkpoint(tmp_path / "ckpt")
-    draft, ckpt = load_draft(target, path, device=device, dtype=get_dtype(device))
+    draft, ckpt = load_draft(target, path, device=device)
     assert ckpt["step"] == 3 and torch.equal(draft.t2d.cpu(), t2d)
+    assert draft.fc.weight.dtype == torch.float32  # reloaded in the dtype it was trained in, not bf16
     # Round-trip: saving the loaded draft reproduces the same weights.
     path2 = save_draft(draft, tmp_path / "ckpt2", 3)
     a, b = torch.load(path, weights_only=False)["state_dict"], torch.load(path2, weights_only=False)["state_dict"]
