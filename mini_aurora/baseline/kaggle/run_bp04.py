@@ -11,7 +11,7 @@ the Qwen3-0.6B download. Everything worth keeping lands in ``/kaggle/working/bp0
     evaluate.json        standalone evaluation of the final checkpoint
     timings.json         wall-clock per stage
 
-Knobs via environment variables (set by push.py): BP04_EPOCHS (2), BP04_DTYPE (fp32/bf16), BP04_GRAD_CKPT (1/0), BP04_LIMIT (all),
+Knobs via environment variables (set by push.py): BP04_EPOCHS (8), BP04_DTYPE (fp32/bf16), BP04_GRAD_CKPT (1/0), BP04_LIMIT (all),
 BP04_HELDOUT (100), BP04_BATCH (2), BP04_ACCUM (4).
 """
 
@@ -55,7 +55,7 @@ def main() -> None:
     run([sys.executable, "-m", "pip", "install", "-q", "-e", "aurora-main", "--no-deps", "-e", ".", "--no-deps"])
     subprocess.run([sys.executable, "-c", "import torch;print('torch', torch.__version__, torch.cuda.get_device_name(0))"], check=True)
 
-    epochs = os.environ.get("BP04_EPOCHS", "2")
+    epochs = os.environ.get("BP04_EPOCHS", "8")
     limit = os.environ.get("BP04_LIMIT", "")
     heldout = os.environ.get("BP04_HELDOUT", "100")
     common_env = {"MINI_AURORA_DEVICE": "cuda", "WANDB_MODE": "offline", "HF_HOME": "/tmp/hf"}

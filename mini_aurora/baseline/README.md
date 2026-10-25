@@ -11,7 +11,7 @@ Tracks #10. Branch: `bp/04-static-baseline`.
 ```bash
 source .venv/bin/activate && source mini_aurora/env.sh          # or: bash mini_aurora/docker/run_cpu.sh <cmd>
 python -m mini_aurora.baseline.dump                              # chat pool -> outputs/baseline/hidden_states/{train,heldout}/
-python -m mini_aurora.baseline.train                             # 2 epochs -> outputs/baseline/checkpoints/
+python -m mini_aurora.baseline.train                             # 8 epochs -> outputs/baseline/checkpoints/
 python -m mini_aurora.baseline.evaluate                          # latest checkpoint on the heldout split
 python -m pytest -q mini_aurora/tests/test_baseline.py           # 3 unit tests + 1 end-to-end smoke (needs the model cached)
 ```

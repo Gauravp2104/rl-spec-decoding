@@ -71,7 +71,8 @@ for the static baseline ~5 GB (optional — can be computed on the fly). **≈10
 With real data (4 × 1025 tokens): **9.92 GB** fp32 / 8.24 GB bf16, 622 / 360 ms per step; 1 × 1025 fp32: 4.35 GB.
 So the 6–8 GB peak above only holds for batch ≤ 2 at 1K tokens (or with gradient checkpointing) — size BP-04 accordingly.
 **BP-04 setting (24K vocab):** 4 × 1025 tokens, 30 steps: fp32 9.92 GB / 720 ms; bf16 9.32 GB / 412 ms;
-**bf16 + gradient checkpointing 7.17 GB / 503 ms** (the BP-04 default).
+**bf16 + gradient checkpointing 7.17 GB / 503 ms**. BP-04 trains with **fp32 weights + gradient checkpointing**
+(2.4 GB on both T4 and MPS): pure-bf16 AdamW trained worse (`mini_aurora/baseline/README.md`).
 
 **Experiment disk:** ~0.5 GB per draft checkpoint (0.6B); ~6–18 GB for ~12 runs. **Total ≤ ~30 GB** (≤ ~50 GB with 1.7B).
 **Time:** ~12 runs × 1–3 h + development ≈ 30–50 Mac-hours. Run experiments sequentially, under `caffeinate -i`.

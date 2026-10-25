@@ -77,7 +77,8 @@ approximate.
 | 24K | fp32 | ✓ | 8.85 GB | 896 ms | 0.991 |
 | **24K** | **bf16** | **✓** | **7.17 GB** | **503 ms** | 0.991 |
 
-24K adds 8.2M `lm_head` parameters and ~1 GB; bf16 + checkpointing (the BP-04 default) more than recovers it.
+24K adds 8.2M `lm_head` parameters and ~1 GB; bf16 + checkpointing more than recovers it. BP-04 nevertheless
+trains in fp32 + checkpointing (2.4 GB on MPS and T4): pure-bf16 AdamW trained worse (`mini_aurora/baseline/README.md`).
 
 - **Why the loss doesn't reach 0:** the loss is cross-entropy against the target's *soft* distribution, so its
   minimum is the target's entropy (0.849 here). The part the draft controls, KL = loss − entropy, does go to ~0.
