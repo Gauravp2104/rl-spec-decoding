@@ -1,8 +1,8 @@
 """Serve requests from a BP-02 stream with speculative decoding (BP-05 step 10).
 
     python -m mini_aurora.server.serve -n 50 --check                     # done-when: greedy == generate on 50
-    python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints --check   # BP-04 τ̄
-    python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints --log outputs/server/run.jsonl
+    python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints_8ep --check   # BP-04 τ̄
+    python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints_8ep --log outputs/server/run.jsonl
     python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0
 
 Each request is a stream conversation minus its final assistant answer (``encode_messages``). Without

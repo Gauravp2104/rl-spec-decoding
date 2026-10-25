@@ -104,8 +104,8 @@ flowchart TB
 
 | Split | Rows | IDs | Tokens (assistant) | Used for |
 |---|---|---|---|---|
-| train | 900 | `chat-00000` … `chat-00899` | 470,938 (366,622) | 2 epochs of draft training (224 optimizer steps) |
-| held out | 100 | `chat-00900` … `chat-00999` | 52,959 (41,535) | per-epoch eval, and τ̄ in BP-05 (`--heldout`) |
+| train | 900 | `chat-00000` … `chat-00899` | 470,938 (366,622) | 8 epochs of draft training (896 optimizer steps) |
+| held out | 100 | `chat-00900` … `chat-00999` | 52,959 (41,535) | per-epoch eval (acc 0.310 / 0.270 / 0.248), and τ̄ = 0.313 in BP-05 (`--heldout`) |
 
 The static draft sees **no code or math** at all. That is deliberate: it is the "static" baseline that should
 fall behind the online draft once the stream shifts to code and math (E2).
@@ -128,5 +128,6 @@ python -m mini_aurora.data.download           # pools  → data/raw/{chat,code,m
 python -m mini_aurora.data.streams            # streams → data/streams/{mixed,ordered,domain_shift}.jsonl
 python -m mini_aurora.data.vocab --compare    # vocab  → outputs/vocab/qwen3_24k_mixed.{pt,json}
 python -m mini_aurora.baseline.dump           # BP-04: chat 900 / 100 → outputs/baseline/hidden_states/
-python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints --check
+python -m mini_aurora.baseline.train --epochs 8 --out outputs/baseline/checkpoints_8ep   # the static baseline
+python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints_8ep --check
 ```

@@ -187,8 +187,8 @@ sequenceDiagram
 
 ```bash
 python -m mini_aurora.server.serve -n 50 --check                      # BP-05 done-when; exits 1 on a mismatch
-python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints --check   # BP-04 τ̄
-python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints --log outputs/server/run.jsonl
+python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints_8ep --check   # BP-04 τ̄
+python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints_8ep --log outputs/server/run.jsonl
 python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0 --bf16
 ```
 
@@ -206,10 +206,19 @@ because the exactness check needs it: in bf16, checking 4 tokens in one pass rou
 | Overfit draft, cache-free | 94.2 | 2.60 | draft trained on this exact answer: an upper bound |
 | **Overfit draft, KV cache** | **122.3** | 2.60 | ~2× the target alone |
 
-**Losslessness:** 50/50 stream prompts (18 chat, 17 code, 15 math) token-identical to `model.generate`.
+**With BP-04's trained static draft** (100 held-out chat requests, `--heldout --check`, up to 128 new tokens):
 
-The lesson: a draft that guesses badly makes serving **slower** than the target alone. The speed-up comes
-entirely from τ̄, which is why BP-04 (a trained starting draft) and BP-06 (keep training it online) matter.
+| Draft | τ̄ | α1 / α2 / α3 | Tokens per target pass | tok/s vs target alone | Lossless |
+|---|---|---|---|---|---|
+| 2 epochs (step 224) | 0.181 | 0.164 / 0.016 / 0.001 | 1.19 | 29.1 vs 54.9 (×0.53) | 100/100 |
+| **8 epochs (step 896), the static baseline** | **0.313** | **0.242 / 0.058 / 0.013** | **1.32** | **32.1 vs 54.8 (×0.59)** | **100/100** |
+
+**Losslessness:** 50/50 stream prompts (18 chat, 17 code, 15 math) and 100/100 held-out chat requests
+token-identical to `model.generate`.
+
+The lesson: a draft that guesses badly makes serving **slower** than the target alone. A round costs ~41 ms
+(~2.3 target-only steps) here, so breaking even needs τ̄ ≈ 1.3; the trained static draft reaches 0.31. The
+speed-up comes entirely from τ̄, which is why BP-06 (keep training the draft online) matters.
 
 ## How it fits the rest
 
@@ -227,4 +236,5 @@ flowchart LR
 - One request at a time (batch size 1); no batching or concurrent requests.
 - Chain drafting only (top-1, one path); tree drafting (top-k > 1) is the later GRPO "groups" hook.
 - No draft KV cache yet; draft cost grows with context length.
-- Speed numbers are on an overfit draft; real numbers wait for BP-04's checkpoint.
+- With BP-04's static draft (τ̄ 0.31) serving is ×0.59 the target-only speed; a cheaper round (draft KV cache) or a
+  stronger draft (BP-06) is needed for a real speed-up.

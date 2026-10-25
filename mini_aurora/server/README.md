@@ -68,16 +68,25 @@ Monte Carlo that sampled acceptance reproduces the target distribution p, not th
 | Overfit draft, KV cache | **122.3** | 2.60 | 15 |
 
 A useless draft is a slowdown (every round costs a draft + a verify pass for one token); a good one gives 2× here.
-The overfit draft has seen this answer, so this is an upper bound; BP-04's trained draft gives the real number.
+The overfit draft has seen this answer, so this is an upper bound. **BP-04's trained static draft** on the 100
+held-out chat requests (`--heldout --check`, up to 128 new tokens):
+
+| Draft | τ̄ | α1 / α2 / α3 | Tokens per target pass | tok/s vs target alone | Lossless |
+|---|---|---|---|---|---|
+| 2 epochs (step 224) | 0.181 | 0.164 / 0.016 / 0.001 | 1.19 | 29.1 vs 54.9 (×0.53) | 100/100 |
+| **8 epochs (step 896)** | **0.313** | **0.242 / 0.058 / 0.013** | **1.32** | **32.1 vs 54.8 (×0.59)** | **100/100** |
+
+A round takes ~41 ms (~2.3 target-only steps), so breaking even needs τ̄ ≈ 1.3.
 
 ```bash
-PYTORCH_ENABLE_MPS_FALLBACK=0 python -m pytest -q -s mini_aurora/tests/test_server.py   # 13 tests, ~2 min
+PYTORCH_ENABLE_MPS_FALLBACK=0 python -m pytest -q -s mini_aurora/tests/test_server.py   # 14 tests, ~2 min
 python -m mini_aurora.server.serve -n 50 --check                       # done-when; exits 1 on any mismatch
-python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints --check   # BP-04 τ̄
-python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints --log outputs/server/run.jsonl
+python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/checkpoints_8ep --check   # BP-04 τ̄
+python -m mini_aurora.server.serve -n 20 --draft outputs/baseline/checkpoints_8ep --log outputs/server/run.jsonl
 python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0 --bf16
 ```
 
-Until BP-04's draft exists, `serve` uses a day-0 draft: output is still exact, but τ̄ ≈ 0 and it runs at about
-half the target-only speed. BP-04's checkpoint plugs in with `--draft outputs/baseline/checkpoints`; `--heldout` serves only the 100 chat
-conversations BP-04 never trained on (its done-when: τ̄ clearly > 0 there).
+Without `--draft`, `serve` uses a day-0 draft: output is still exact, but τ̄ ≈ 0 and it runs at about half the
+target-only speed. BP-04's static baseline plugs in with `--draft outputs/baseline/checkpoints_8ep` (train it with
+`python -m mini_aurora.baseline.train --epochs 8 --out outputs/baseline/checkpoints_8ep`); `--heldout` serves only
+the 100 chat conversations BP-04 never trained on (its done-when: τ̄ clearly > 0 there, met at 0.313).
