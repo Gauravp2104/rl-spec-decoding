@@ -3,13 +3,15 @@
 #   bash mini_aurora/zaratan/submit_bp08.sh            # 15 jobs
 #   N=300 bash mini_aurora/zaratan/submit_bp08.sh      # shorter runs
 #   ONLY="E2 static" bash mini_aurora/zaratan/submit_bp08.sh
+#   GPU=a100_1g.5gb:1 PART=gpu-a100_1g.5gb bash mini_aurora/zaratan/submit_bp08.sh   # MIG slices (7 SU/h, short queue)
 set -eo pipefail
+GPU="${GPU:-a100:1}"; PART="${PART:-gpu}"
 cd "$(dirname "$0")/../.."
 S=mini_aurora/zaratan/bp08_arm.sbatch
 submit() {  # exp arm [grid] [walltime]
   local exp=$1 arm=$2 grid=${3:-} t=${4:-4:00:00}
   if [ -n "${ONLY:-}" ] && [ "${ONLY}" != "$exp $arm${grid:+ $grid}" ]; then return; fi
-  sbatch -t "$t" -J "bp08-$exp-$arm${grid:+-$grid}" --export=ALL,EXP=$exp,ARM=$arm,GRID=$grid,N=${N:-} "$S"
+  sbatch -t "$t" -p "$PART" --gpus="$GPU" -J "bp08-$exp-$arm${grid:+-$grid}" --export=ALL,EXP=$exp,ARM=$arm,GRID=$grid,N=${N:-} "$S"
 }
 submit E1 target_only "" 3:00:00
 submit E1 day0        "" 4:00:00
