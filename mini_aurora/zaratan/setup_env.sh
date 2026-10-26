@@ -9,6 +9,8 @@ VENV="${VENV:-$SCRATCH/venv}"
 
 # Aurora needs Python >= 3.12 and Zaratan's newest python module is 3.10, so uv fetches a standalone CPython 3.12
 # (everything under scratch: home is 10 GB).
+mkdir -p "$SCRATCH/tmp"
+export TMPDIR="$SCRATCH/tmp" UV_LINK_MODE=copy UV_NO_MODIFY_PATH=1   # keep temp files and wheels out of the 10 GB home
 export UV_INSTALL_DIR="$SCRATCH/bin" UV_PYTHON_INSTALL_DIR="$SCRATCH/uv-python" UV_CACHE_DIR="$SCRATCH/uv-cache"
 [ -x "$SCRATCH/bin/uv" ] || curl -LsSf https://astral.sh/uv/install.sh | sh
 UV="$SCRATCH/bin/uv"
