@@ -7,6 +7,7 @@ The hand-written log has 4 requests (K = 3, chat then code). Over all 8 rounds t
 """
 
 import csv
+import gc
 import json
 from pathlib import Path
 
@@ -14,6 +15,7 @@ import pytest
 import torch
 from huggingface_hub import try_to_load_from_cache
 
+from mini_aurora.device import empty_cache, get_device
 from mini_aurora.eval.bench import run_bench
 from mini_aurora.eval.metrics import (
     acceptance_rate,
@@ -157,6 +159,14 @@ def test_plot_run_writes_every_figure(tmp_path, monkeypatch):
     assert [p.name for p in paths] == ["rolling_tau.png", "alpha.png", "staleness.png", "loss.png", "tokens_per_s.png"]
     assert all(p.stat().st_size > 1000 for p in paths)
     assert (tmp_path / "eval" / "metrics.csv").exists() and (tmp_path / "eval" / "summary.json").exists()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def release_device_memory():
+    """Return this module's cached MPS memory when it ends (see ``test_online.py``)."""
+    yield
+    gc.collect()
+    empty_cache(get_device())
 
 
 needs_models = pytest.mark.skipif(
