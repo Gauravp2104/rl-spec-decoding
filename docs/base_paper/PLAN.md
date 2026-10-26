@@ -121,6 +121,10 @@ Merge order: **BP-01 → (BP-02, BP-03) → (BP-04, BP-05) → BP-06 → BP-07 �
 - Modes: **sync** (serve B requests ↔ train M steps; fixed Δ) and **async** (two threads; real Δ).
 - Starts: **day-0** (random draft) and **with-draft** (BP-04 checkpoint).
 - **Done when:** a 300-request day-0 run on the mixed stream shows τ̄ rising.
+- **Result (2026-10-26, MacBook Air, fp32):** day-0, sync, first 300 mixed requests, 128 new tokens, batch 2 × accum 1
+  (150 steps), publish every 5 steps (30 publishes): rolling τ̄ **0.039 (first 50) → 0.246 (last 50)**, still rising;
+  0.152 overall (α 0.141 / 0.009 / 0.001); **300/300 lossless** (`--check`); peak MPS 7.52 GB, 54.6 min with
+  `--check`. bf16 gave the same curve (0.038 → 0.247). Details: `mini_aurora/online/README.md`.
 
 ### BP-07 — Evaluation and metrics (`bp/07-eval-metrics`)
 - Rolling τ̄ vs. request index, per-position α_i, acceptance rate, tokens/s vs. target-only, estimated speed-up, staleness histogram, loss curve.
