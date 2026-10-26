@@ -10,6 +10,7 @@ Mirrors ``aurora/training/eagle3_trainer.py`` without FSDP / Ray / Mooncake:
   target probabilities, run the ``length``-step TTT unroll.
 """
 
+import os
 from pathlib import Path
 
 import torch
@@ -22,7 +23,8 @@ from aurora.models.eagle3 import Eagle3Model, compute_target_p_padded
 from aurora.models.target.eagle3_target_model import Eagle3TargetOutput, HFTargetModel
 from aurora.utils.tensor import padding
 
-DRAFT_CONFIG = Path(__file__).resolve().parents[2] / "examples" / "mac-qwen3-0.6b" / "draft_config.json"
+DRAFT_CONFIG = Path(os.environ.get(  # BP-09: e.g. examples/zaratan-qwen3-1.7b/draft_config.json
+    "MINI_AURORA_DRAFT_CONFIG", Path(__file__).resolve().parents[2] / "examples" / "mac-qwen3-0.6b" / "draft_config.json"))
 TTT_LENGTH = 3
 # Aurora's per-position loss weights: 0.8 ** i.
 PLOSS_DECAY = 0.8
