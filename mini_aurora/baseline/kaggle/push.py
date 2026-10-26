@@ -1,7 +1,7 @@
 """Run BP-04 on Kaggle's free T4 and pull the results back.
 
 1. Packages the repo source (mini_aurora/, aurora-main/aurora, examples/, pyproject files) together with
-   ``data/raw/chat.jsonl`` and ``outputs/vocab/`` (24K mapping) into the private Kaggle dataset ``<user>/rl-spec-decoding-src``
+   ``data/raw/chat.jsonl``, ``data/streams/mixed.jsonl`` (for BP-05's server) and ``outputs/vocab/`` (24K mapping) into the private Kaggle dataset ``<user>/rl-spec-decoding-src``
    (kernels can attach datasets, not git branches).
 2. Pushes ``run_bp04.py`` as a private GPU script kernel ``<user>/rl-spec-decoding-bp04`` with internet on
    (Qwen3-0.6B download), polls until it finishes, then downloads ``/kaggle/working/bp04/`` into
@@ -53,6 +53,8 @@ def push_source(user: str) -> str:
         shutil.copy(ROOT / "pyproject.toml", d / "pyproject.toml")
         (d / "data" / "raw").mkdir(parents=True)
         shutil.copy(ROOT / "data" / "raw" / "chat.jsonl", d / "data" / "raw" / "chat.jsonl")
+        (d / "data" / "streams").mkdir()
+        shutil.copy(ROOT / "data" / "streams" / "mixed.jsonl", d / "data" / "streams" / "mixed.jsonl")
         shutil.copytree(ROOT / "outputs" / "vocab", d / "outputs" / "vocab")
         (d / "dataset-metadata.json").write_text(json.dumps({"title": DATASET, "id": slug, "licenses": [{"name": "CC0-1.0"}]}))
         exists = DATASET in kaggle("datasets", "list", "--mine", check=False)
@@ -63,12 +65,12 @@ def push_source(user: str) -> str:
     return slug
 
 
-def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None) -> str:
+def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None, serve: bool) -> str:
     kid = f"{user}/{KERNEL}"
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         script = (HERE / "run_bp04.py").read_text()
-        env = {"BP04_EPOCHS": str(epochs), "BP04_DTYPE": dtype, "BP04_GRAD_CKPT": "1" if grad_ckpt else "0", "BP04_LIMIT": str(limit or "")}
+        env = {"BP04_EPOCHS": str(epochs), "BP04_DTYPE": dtype, "BP04_GRAD_CKPT": "1" if grad_ckpt else "0", "BP04_LIMIT": str(limit or ""), "BP04_SERVE": "1" if serve else "0"}
         header = "import os\n" + "".join(f"os.environ[{k!r}] = {v!r}\n" for k, v in env.items())
         (d / "run_bp04.py").write_text(header + script)
         (d / "kernel-metadata.json").write_text(json.dumps({
@@ -122,11 +124,12 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=None, help="conversations to dump (smoke run)")
     ap.add_argument("--pull-only", action="store_true")
     ap.add_argument("--label", default=None, help="output folder under outputs/baseline/kaggle/")
+    ap.add_argument("--no-serve", action="store_true", help="skip BP-05's held-out τ̄ check after training")
     a = ap.parse_args()
     kid = f"{a.user}/{KERNEL}"
     if not a.pull_only:
         slug = push_source(a.user)
-        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit)
+        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit, not a.no_serve)
         print("final:", wait(kid))
     pull(kid, a.label or f"{a.dtype}{'' if a.no_grad_ckpt else '_ckpt'}_{a.epochs}ep{'_limit' + str(a.limit) if a.limit else ''}")
 

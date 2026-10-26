@@ -9,10 +9,12 @@ the Qwen3-0.6B download. Everything worth keeping lands in ``/kaggle/working/bp0
     eval.json            per-epoch held-out loss and accuracy
     draft_step*.pt/json  final checkpoint (trainable weights + vocab buffers, no embedding)
     evaluate.json        standalone evaluation of the final checkpoint
+    serve_heldout.txt    BP-05 server on the held-out chat requests with the trained draft (τ̄, --check), BP04_SERVE=1
+    serve_heldout.jsonl  one JSON line per request from that run
     timings.json         wall-clock per stage
 
 Knobs via environment variables (set by push.py): BP04_EPOCHS (8), BP04_DTYPE (fp32/bf16), BP04_GRAD_CKPT (1/0), BP04_LIMIT (all),
-BP04_HELDOUT (100), BP04_BATCH (2), BP04_ACCUM (4).
+BP04_HELDOUT (100), BP04_BATCH (2), BP04_ACCUM (4), BP04_SERVE (1).
 """
 
 import json
@@ -35,10 +37,16 @@ def find_source() -> Path:
     raise SystemExit("rl-spec-decoding-src dataset not attached")
 
 
-def run(cmd: list[str], **env) -> float:
+def run(cmd: list[str], tee: Path | None = None, **env) -> float:
     print("+", " ".join(cmd), flush=True)
     t0 = time.perf_counter()
-    subprocess.run(cmd, check=True, cwd=REPO, env={**os.environ, **env})
+    if tee is None:
+        subprocess.run(cmd, check=True, cwd=REPO, env={**os.environ, **env})
+    else:
+        r = subprocess.run(cmd, cwd=REPO, env={**os.environ, **env}, text=True, capture_output=True)
+        print(r.stdout, r.stderr[-3000:], flush=True)
+        tee.write_text(r.stdout)
+        r.check_returncode()
     return round(time.perf_counter() - t0, 1)
 
 
@@ -73,6 +81,12 @@ def main() -> None:
     timings["train_s"] = run(train, **common_env)
 
     timings["evaluate_s"] = run([sys.executable, "-m", "mini_aurora.baseline.evaluate", "--out", "outputs/baseline/evaluate.json"], **common_env)
+
+    if os.environ.get("BP04_SERVE", "1") == "1" and not limit:
+        timings["serve_s"] = run([sys.executable, "-m", "mini_aurora.server.serve", "-n", heldout, "--heldout", "--check",
+                                  "--draft", "outputs/baseline/checkpoints", "--log", "outputs/server/heldout.jsonl"],
+                                 tee=OUT / "serve_heldout.txt", **common_env)
+        shutil.copy(REPO / "outputs" / "server" / "heldout.jsonl", OUT / "serve_heldout.jsonl")
 
     base = REPO / "outputs" / "baseline"
     shutil.copy(base / "hidden_states" / "manifest.json", OUT / "manifest.json")
