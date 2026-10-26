@@ -37,7 +37,7 @@ Tracks #14. Branch: `bp/06-online-loop`.
   `trainer_version_end`), so staleness = `trainer_version − versions[r]` per round.
 - [x] **7. CLI**: writes `requests.jsonl` (BP-05 `RequestLog` lines + `index`, `trainer_version`,
   `trainer_version_end`, `pool_size`), `train_log.csv`, `config.json` and `summary.json`.
-- [x] **8. Tests** (`mini_aurora/tests/test_online.py`, 15 tests, ~3 min): the pool blocks when full / keeps FIFO
+- [x] **8. Tests** (`mini_aurora/tests/test_online.py`, 16 tests, ~3 min): the pool blocks when full / keeps FIFO
   / gates on the threshold / stores on CPU; a publish makes the served weights equal the trainer's and bumps the
   version; both start modes; a tiny sync run; **fp32 greedy with `check=True` stays token-identical to target-only
   decoding across hot-swaps** (sync: 10 requests, 4 swaps; async: 10 requests); a failing trainer doesn't hang the
@@ -78,7 +78,7 @@ at 36.6 tok/s), as BP-05 found: a round here costs ~74 ms ≈ 2.7 target-only st
 τ̄ ≈ 1.7 with this cache-free drafter.
 
 ```bash
-python -m pytest -q mini_aurora/tests/test_online.py                                         # 15 tests, ~3 min
+python -m pytest -q mini_aurora/tests/test_online.py                                         # 16 tests, ~3 min
 python -m mini_aurora.online.loop --mode sync --start day0 -n 20 --max-new-tokens 32 --out outputs/online/dev
 python -m mini_aurora.online.loop --mode async --start day0 -n 20 --max-new-tokens 32 --out outputs/online/dev_async
 python -m mini_aurora.online.loop --mode sync --start draft --draft outputs/baseline/checkpoints_8ep -n 300 \
@@ -88,6 +88,22 @@ python -m mini_aurora.online.loop --mode sync --start draft --draft outputs/base
 `--check` compares every output with target-only greedy (fp32, slow); `--overwrite` replaces an existing run in
 `--out`; `--save-draft` saves the trainer's final draft in BP-04's checkpoint format. Memory knobs:
 `--batch-size`, `--accumulation`, `--max-seq-len`, `--max-pool-size`.
+
+### With-draft start
+
+The BP-04 static draft (8 epochs = step 896, held-out acc 0.311, τ̄ 0.315 in BP-05's loop) is GitHub release
+`bp04-static-v1` (`draft_step000896.pt` + `latest.txt`, so `--draft` takes the directory):
+
+```bash
+gh release download bp04-static-v1 -R Gauravp2104/rl-spec-decoding -D outputs/baseline/checkpoints_8ep
+shasum -a 256 outputs/baseline/checkpoints_8ep/draft_step000896.pt   # 89f66983...b67b7e4d (release notes)
+python -m mini_aurora.online.loop --mode sync --start draft --draft outputs/baseline/checkpoints_8ep \
+    -n 20 --max-new-tokens 32 --out outputs/online/draft_smoke
+```
+
+Smoke run (MacBook Air, fp32, 20 mixed requests): served and trainer versions start at 896 (trainer steps 897,
+898, ...), LR 1e-5, **τ̄ 0.26 from the first requests** (day-0 starts at 0), peak MPS 6.6 GB.
+`test_start_draft_with_bp04_release` checks this when the file is present and is skipped otherwise.
 
 ### Done when
 

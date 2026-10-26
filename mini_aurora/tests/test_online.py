@@ -27,7 +27,7 @@ from mini_aurora.online.start import start
 from mini_aurora.online.trainer import OnlineTrainer, collate_samples
 from mini_aurora.server.drafter import Drafter, trainable_state
 from mini_aurora.server.log import RequestLog, read_log
-from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve
+from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve, summarize
 
 from aurora.models.target.eagle3_target_model import Eagle3TargetOutput  # noqa: I001
 
@@ -340,3 +340,17 @@ def test_async_trainer_failure_does_not_hang(models):
     with pytest.raises(RuntimeError, match="training thread failed"):
         loop.run_async(rows)
     assert len(loop.records) < 6  # serving stopped once the pool was closed
+
+
+BP04_DRAFT = Path("outputs/baseline/checkpoints_8ep")  # release bp04-static-v1
+
+
+@needs_models
+@pytest.mark.skipif(not (BP04_DRAFT / "latest.txt").exists(), reason="BP-04 release missing (gh release download bp04-static-v1)")
+def test_start_draft_with_bp04_release(models):
+    target, tokenizer, vocab, _, _ = models
+    drafter, trainer = start(target, "draft", vocab, draft_path=BP04_DRAFT, batch_size=2, accumulation=1)
+    assert drafter.version == trainer.step_count == 896 and trainer.lr == 1e-5
+    assert _same_weights(trainer.draft, drafter.draft)
+    records = serve(target, drafter, tokenizer, load_requests(DEFAULT_STREAM, 8, domain="chat"), max_new_tokens=32)
+    assert summarize(records)["all"]["tau"] > 0.1  # a day-0 draft accepts ~nothing; BP-04 reaches 0.31 on chat

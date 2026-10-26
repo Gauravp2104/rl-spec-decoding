@@ -3,7 +3,7 @@
     python -m mini_aurora.online.loop --mode sync --start day0 -n 300 --sync-every 1 --out outputs/online/day0_sync
     python -m mini_aurora.online.loop --mode async --start day0 -n 20 --max-new-tokens 32 --out outputs/online/dev
     python -m mini_aurora.online.loop --mode sync --start draft --draft outputs/baseline/checkpoints_8ep -n 300 \
-        --out outputs/online/draft_sync
+        --out outputs/online/draft_sync                  # checkpoint: release bp04-static-v1
 
 Writes ``<out>/requests.jsonl`` (BP-05 ``RequestLog`` lines + the fields below), ``<out>/train_log.csv``,
 ``<out>/config.json`` and, at the end, ``<out>/summary.json`` (loop summary + ``summarize()`` per domain).
