@@ -57,7 +57,7 @@ def main() -> None:
     if ckpt_path is None or not ckpt_path.exists():
         raise SystemExit(f"no checkpoint found ({args.ckpt or CKPT_DIR})")
     target = load_target(device=device)
-    draft, ckpt = load_draft(target, ckpt_path, device=device, dtype=get_dtype(device))
+    draft, ckpt = load_draft(target, ckpt_path, device=device)  # in the checkpoint's dtype, as trained
     eagle3 = wrap_eagle3(draft)
     loader = make_loader(Path(args.dump_dir) / args.split, args.batch_size, shuffle=False, feature_dtype=get_dtype(device))
     result = {"checkpoint": str(ckpt_path), "step": ckpt["step"], "split": args.split,

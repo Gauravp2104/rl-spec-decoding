@@ -7,7 +7,7 @@
    (Qwen3-0.6B download), polls until it finishes, then downloads ``/kaggle/working/bp04/`` into
    ``outputs/baseline/kaggle/<label>/`` (``--label``, default ``<dtype>[_ckpt]_<epochs>ep``; an existing folder is replaced).
 
-    python mini_aurora/baseline/kaggle/push.py --user <kaggle user>                # full run: 2 epochs, fp32 draft + grad ckpt
+    python mini_aurora/baseline/kaggle/push.py --user <kaggle user>                # full run: 8 epochs, fp32 draft + grad ckpt
     python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --limit 20     # smoke run
     python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --dtype bf16
     python mini_aurora/baseline/kaggle/push.py --user <kaggle user> --pull-only
@@ -116,7 +116,7 @@ def pull(kid: str, label: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--user", required=True, help="Kaggle username")
-    ap.add_argument("--epochs", type=int, default=2)
+    ap.add_argument("--epochs", type=int, default=8)
     ap.add_argument("--dtype", choices=["bf16", "fp32"], default="fp32", help="draft weights (default fp32)")
     ap.add_argument("--no-grad-ckpt", action="store_true", help="disable gradient checkpointing")
     ap.add_argument("--limit", type=int, default=None, help="conversations to dump (smoke run)")

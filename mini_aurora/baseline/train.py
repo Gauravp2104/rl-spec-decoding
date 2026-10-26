@@ -1,6 +1,6 @@
 """Train the static EAGLE-3 draft on a feature dump (Aurora's offline training, single device).
 
-    python -m mini_aurora.baseline.train                            # 2 epochs on outputs/baseline/hidden_states/train
+    python -m mini_aurora.baseline.train                            # 8 epochs on outputs/baseline/hidden_states/train
     python -m mini_aurora.baseline.train --limit 20 --epochs 1       # smoke test
     python -m mini_aurora.baseline.train --dtype bf16 --out outputs/baseline/checkpoints_bf16
 
@@ -39,7 +39,7 @@ def train(
     dump_dir: str = DUMP_DIR,
     out_dir: str = CKPT_DIR,
     vocab_path: str = DEFAULT_VOCAB,
-    epochs: int = 2,
+    epochs: int = 8,
     lr: float = 1e-4,
     batch_size: int = 2,
     accumulation: int = 4,
@@ -135,7 +135,7 @@ def main() -> None:
     p.add_argument("--dump-dir", default=DUMP_DIR)
     p.add_argument("--out", default=CKPT_DIR)
     p.add_argument("--vocab", default=DEFAULT_VOCAB)
-    p.add_argument("--epochs", type=int, default=2)
+    p.add_argument("--epochs", type=int, default=8)
     p.add_argument("--lr", type=float, default=1e-4)
     p.add_argument("--batch-size", type=int, default=2)
     p.add_argument("--accumulation", type=int, default=4)
