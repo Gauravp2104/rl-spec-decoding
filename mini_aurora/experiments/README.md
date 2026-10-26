@@ -47,6 +47,28 @@ same experiment and stream.
 | `day0` | – | runnable |
 | `online_day0`, `online_static` | BP-06 loop (#15) and BP-07 metrics (#17) merged | wired; `run.py` refuses them while `mini_aurora.online` is missing |
 
+## Running the full table on Zaratan (one A100 per arm)
+
+```bash
+bash mini_aurora/zaratan/submit_bp08.sh                    # 15 jobs: E1-E3 (3 arms each) + E4 (6 settings), full streams
+ONLY="E2 static" bash mini_aurora/zaratan/submit_bp08.sh   # one arm
+squeue -u $USER                                            # progress; outputs in ~/rl-work/outputs/experiments/
+python -m mini_aurora.experiments.table --out-dir ~/rl-work/outputs/experiments
+```
+
+Each arm is one `bp08_arm.sbatch` job (`msai635-class`, `--gpus=a100:1`, fp32 target and served draft, K = 3,
+128 new tokens, the frozen BP-04 draft from release `bp04-static-v1`). Online arms use the loop's defaults
+(sync, publish every 10 steps, batch 2 × accumulation 4, LR 1e-4 day-0 / 1e-5 with-draft) unless an E4 setting
+overrides one of them.
+
 ## Results
 
-<!-- filled in by table.py once the arms have run -->
+<!-- table.py output goes here once the arms have run; per-experiment notes below -->
+
+### E1 — day-0 deployment (mixed stream)
+
+### E2 — static vs online under domain shift (chat → code → math)
+
+### E3 — ordered stream
+
+### E4 — sensitivity (publish interval, learning rate, sync vs async)
