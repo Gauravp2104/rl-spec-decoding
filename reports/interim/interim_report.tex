@@ -224,30 +224,50 @@ depend on hardware; we also report $\alpha_i$, measured and estimated speed-up, 
 
 All runs use MPS on Mac laptops, greedy decoding, $K=3$, fp32 target and draft, and up to 128 new tokens, unless
 stated. Different runs used different laptops, so tokens/s is only compared within a run.
+Table~\ref{tab:train} covers the draft on its own; Table~\ref{tab:serve} the server with a fixed draft;
+Tables~\ref{tab:runs} and~\ref{tab:online} and Figure~\ref{fig:rolling} the online loop.
 
-\paragraph{Correctness.} Speculative output is token-identical to target-only decoding on every request checked:
-50/50 stream prompts and 100/100 held-out chat requests with a fixed draft, and \textbf{300/300} requests of the
-online run while the draft's weights were replaced 30 times.
-
-\paragraph{Draft trainability and cost.} On one fixed batch the draft overfits in 200 steps (loss
-9.87$\to$0.851 against a target-entropy floor of 0.849; accuracy 0.99 / 0.99 / 0.98). A training step on
-4$\times$1025 tokens takes 720\,ms and 9.9\,GB in fp32, or 503\,ms and 7.2\,GB in bf16 with gradient
-checkpointing; batch 2 with checkpointing trains in 2.4\,GB. The latency bench gives a target step of 27.5\,ms, a
-draft step of 2.7\,ms ($c=0.099$) and a 4-token verify pass of 30.0\,ms.
-
-\paragraph{Static baseline.} The static draft's held-out accuracy (draft argmax equals target argmax,
-teacher-forced, TTT steps 1/2/3) rises from 0.183 after epoch 1 to 0.245 after epoch 2 and \textbf{0.310 / 0.270
-/ 0.248} after epoch 8, plateauing after epoch 6. A 2-epoch run gives the same numbers on a CUDA GPU and on MPS,
-and the released CUDA-trained 8-epoch checkpoint matches the MPS one ($\taubar$ 0.315 vs.\ 0.313).
-Table~\ref{tab:serve} gives end-to-end serving results. The upper rows are sanity bounds: an untrained draft
-accepts nothing, while a draft overfitted to the exact answers reaches $\taubar=2.6$ and twice the target-only
-speed, so the server can deliver a real speed-up when the draft guesses well. On held-out chat the trained static
-draft reaches $\taubar=0.313$.
+\begin{table}[t]
+\centering\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Draft training and cost. Accuracy is teacher-forced (draft argmax equals target argmax) at TTT steps
+1/2/3 on the 100 held-out chat conversations.}
+\label{tab:train}
+\begin{minipage}[t]{0.53\linewidth}\centering
+\begin{tabular}{@{}lc@{}}
+\toprule
+Draft training & Result \\
+\midrule
+Overfit 1 batch (200 steps): loss & 9.87$\to$0.851 (floor 0.849) \\
+Overfit 1 batch: accuracy & 0.99 / 0.99 / 0.98 \\
+Static, epoch 1: accuracy (step 1) & 0.183 \\
+Static, epoch 2: accuracy (step 1) & 0.245 \\
+\textbf{Static, epoch 8: accuracy} & \textbf{0.310 / 0.270 / 0.248} \\
+Plateau & after epoch 6 \\
+8-ep.\ $\taubar$, MPS vs.\ CUDA-trained & 0.313 vs.\ 0.315 \\
+\bottomrule
+\end{tabular}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.44\linewidth}\centering
+\begin{tabular}{@{}lc@{}}
+\toprule
+Cost & Time / memory \\
+\midrule
+Train step 4$\times$1025, fp32 & 720\,ms / 9.9\,GB \\
+Same, bf16 + ckpt & 503\,ms / 7.2\,GB \\
+Batch 2 + ckpt & -- / 2.4\,GB \\
+Target step (1 token) & 27.5\,ms \\
+Draft step & 2.7\,ms ($c=0.099$) \\
+Verify pass (4 tokens) & 30.0\,ms \\
+Online loop peak, fp32 / bf16 & 7.5 / 6.0\,GB \\
+\bottomrule
+\end{tabular}
+\end{minipage}
+\end{table}
 
 \begin{table}[t]
 \centering\small
 \caption{Speculative serving with a fixed draft. $\alpha_i$ is the share of rounds whose first $i$ guesses were
-all accepted, so $\taubar=\alpha_1+\alpha_2+\alpha_3$.}
+all accepted, so $\taubar=\alpha_1+\alpha_2+\alpha_3$. The first two rows are sanity bounds.}
 \label{tab:serve}
 \footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}lccccc@{}}
@@ -263,71 +283,95 @@ Static, 2 epochs & 100 held-out & 0.181 & 0.164 / 0.016 / 0.001 & 29.1 vs.\ 54.9
 \end{tabular}
 \end{table}
 
-\paragraph{Online day-0 run.} We served the first 300 requests of the mixed stream (104 chat, 100 code, 96 math)
-starting from a \emph{random} draft, in sync mode: one optimizer step per 2 requests (each sample used once),
-learning rate $10^{-4}$, a publish every 5 steps. That is 150 training steps and 30 weight swaps; the run took 55
-minutes, 2.3 of which were training, with a peak of 7.5\,GB. Figure~\ref{fig:rolling} and Table~\ref{tab:online}
-show the result: rolling $\taubar$ rises from \textbf{0.039} over the first 50 requests to \textbf{0.246} over the
-last 50, and is still rising at request 300. An earlier run of the same setup in bf16 gave the same curve
-(0.038$\to$0.247) in 39 minutes and 6.0\,GB. A with-draft smoke run (20 mixed requests from the released static
-draft, learning rate $10^{-5}$) starts at $\taubar\approx0.26$ immediately, a level the day-0 draft only reaches
-after about 300 requests.
+\begin{table}[t]
+\centering\small
+\caption{Online runs on the mixed stream, sync mode, one optimizer step per 2 requests (each sample used once),
+publish every 5 steps. $\taubar$ is over the first and last 50 requests; the bf16 run did not check losslessness.}
+\label{tab:runs}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+Run & Start & LR & Req. & Steps/swaps & $\taubar$ first$\to$last & Time (train) & Peak & Lossless \\
+\midrule
+\textbf{Day-0, fp32} & random & $10^{-4}$ & 300 & 150 / 30 & \textbf{0.039$\to$0.246} & 55 min (2.3) & 7.5\,GB & \textbf{300/300} \\
+Day-0, bf16 & random & $10^{-4}$ & 300 & 150 / 30 & 0.038$\to$0.247 & 39 min & 6.0\,GB & -- \\
+With-draft (smoke) & static & $10^{-5}$ & 20 & -- & $\approx$0.26 at once & -- & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering\small
+\caption{Day-0 fp32 run by domain (104 chat, 100 code, 96 math). Speed is relative to target-only decoding of the
+same requests; the estimate is $(1+\taubar)/(1+Kc)$ with $c=0.099$. ``Thirds'' is $\taubar$ over the first vs.\
+last third of each domain's requests.}
+\label{tab:online}
+\footnotesize\setlength{\tabcolsep}{2.8pt}
+\begin{tabular}{@{}lcccccccc@{}}
+\toprule
+ & $\taubar$ & Thirds & $\alpha_1/\alpha_2/\alpha_3$ & tok/s (vs.\ target) & Est.\ speed-up & $\Delta$ mean / max & Lossless \\
+\midrule
+chat & 0.090 & 0.050 $\to$ 0.126 & 0.087 / 0.003 / 0.000 & 13.6 (0.45$\times$) & 0.84$\times$ & 2.08 / 4 & 104/104 \\
+code & 0.144 & 0.074 $\to$ 0.226 & 0.137 / 0.006 / 0.000 & 19.1 (0.58$\times$) & 0.88$\times$ & 1.92 / 4 & 100/100 \\
+math & 0.227 & 0.115 $\to$ 0.318 & 0.204 / 0.019 / 0.003 & 19.7 (0.61$\times$) & 0.95$\times$ & 1.89 / 4 & 96/96 \\
+\midrule
+all & 0.152 & -- & 0.141 / 0.009 / 0.001 & 16.9 (0.53$\times$) & 0.89$\times$ & 1.96 / 4 & 300/300 \\
+first 50 & 0.039 & -- & 0.038 / 0.000 / 0.000 & -- & -- & -- & -- \\
+\textbf{last 50} & \textbf{0.246} & -- & \textbf{0.215 / 0.028 / 0.003} & -- & 0.96$\times$ & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.66\linewidth]{figures/rolling_tau.png}
+\includegraphics[width=0.62\linewidth]{figures/rolling_tau.png}
 \caption{Day-0 online run: per-request $\taubar$ (dots) and rolling $\taubar$ over the last 50 requests, with
 each request's domain underneath.}
 \label{fig:rolling}
 \end{figure}
 
+\paragraph{What the numbers say.}
+\begin{enumerate}
+  \item \textbf{Correct by construction.} Output is token-identical to target-only decoding on all 450 checked
+  requests, including 300 during which the draft's weights were replaced 30 times.
+  \item \textbf{Online learning works from scratch.} With 150 steps on about 34K completion tokens, the day-0
+  draft reaches 80\% of the static draft's $\taubar$, which needed 896 offline steps; it is still rising at
+  request 300 and learns fastest on math, whose text is the most predictable. Starting from the static draft
+  skips this warm-up entirely. Precision does not change $\taubar$ (fp32 and bf16 curves match).
+  \item \textbf{Acceptance is almost all at the first guess.} Guesses 2--3 are built on the draft's own hidden
+  states and a chain stops at the first miss, so teacher-forced accuracy (0.31 / 0.27 / 0.25) overstates live
+  $\alpha_2,\alpha_3$. These positions are where an acceptance-based reward differs most from forward KL.
+  \item \textbf{Staleness is small and harmless:} 0--4 steps (mean 1.96), with losslessness through every swap.
+  \item \textbf{Still slower than the target alone.} A round costs about 2.2--2.3 target steps but yields only
+  $1+\taubar$ tokens, so break-even needs $\taubar\approx1.2$--$1.3$. The estimate (0.89$\times$) beats the
+  measurement (0.53$\times$) because it omits the 4-token verify pass, the draft re-reading its growing context
+  (no draft KV cache yet) and per-round overhead.
+\end{enumerate}
+
 \begin{table}[t]
 \centering\small
-\caption{Day-0 online run, 300 mixed requests. Measured speed is relative to target-only decoding of the same
-requests; the estimate uses the bench's $c=0.099$.}
-\label{tab:online}
+\caption{Our results next to typical published figures (approximate, larger targets and tree drafting).
+Acceptance length is tokens per target pass, $1+\taubar$.}
+\label{tab:sota}
 \footnotesize\setlength{\tabcolsep}{4pt}
-\begin{tabular}{@{}lccccccc@{}}
+\begin{tabular}{@{}lccc@{}}
 \toprule
- & Requests & $\taubar$ & $\alpha_1/\alpha_2/\alpha_3$ & tok/s (vs.\ target) & Est.\ speed-up & $\Delta$ mean / max & Lossless \\
+System & Target & Tokens per target pass & Speed-up \\
 \midrule
-chat & 104 & 0.090 & 0.087 / 0.003 / 0.000 & 13.6 (0.45$\times$) & 0.84$\times$ & 2.08 / 4 & 104/104 \\
-code & 100 & 0.144 & 0.137 / 0.006 / 0.000 & 19.1 (0.58$\times$) & 0.88$\times$ & 1.92 / 4 & 100/100 \\
-math & 96 & 0.227 & 0.204 / 0.019 / 0.003 & 19.7 (0.61$\times$) & 0.95$\times$ & 1.89 / 4 & 96/96 \\
+Classic speculative decoding, Medusa (published) & 7B--70B & $\sim$2--3 & $\sim$2--3$\times$ \\
+EAGLE-2 / EAGLE-3, tree drafting (published) & 8B--70B & $\sim$4--6 & $\sim$3--6$\times$ \\
 \midrule
-all & 300 & 0.152 & 0.141 / 0.009 / 0.001 & 16.9 (0.53$\times$) & 0.89$\times$ & 1.96 / 4 & 300/300 \\
-first 50 & 50 & 0.039 & 0.038 / 0.000 / 0.000 & -- & -- & -- & -- \\
-\textbf{last 50} & 50 & \textbf{0.246} & \textbf{0.215 / 0.028 / 0.003} & -- & 0.96$\times$ & -- & -- \\
+Ours, static draft (chain, $K=3$) & 0.6B & 1.31 & 0.59$\times$ \\
+Ours, day-0 online, last 50 requests & 0.6B & 1.25 & 0.53$\times$ (whole run) \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{What the numbers say.}
-\begin{enumerate}
-  \item \textbf{Online learning works from scratch.} With only 150 steps on about 34K completion tokens, the
-  day-0 draft reaches 80\% of the static draft's $\taubar$, which needed 896 offline steps. It learns fastest on
-  math, whose text is the most predictable (math $0.115\to0.318$, code $0.074\to0.226$, chat $0.050\to0.126$,
-  first vs.\ last third of each domain's requests).
-  \item \textbf{Acceptance is almost all at the first guess.} $\alpha_2$ and $\alpha_3$ stay small for both
-  drafts. Guesses 2--3 are built on the draft's own hidden states, and a chain stops at the first miss, so
-  errors compound; teacher-forced accuracy (0.31 / 0.27 / 0.25) therefore overstates live acceptance. Positions
-  2--3 are exactly where an acceptance-based reward differs most from forward KL.
-  \item \textbf{Staleness is small and harmless.} The served draft lags the trainer by 0--4 steps (mean 1.96),
-  and losslessness held through every swap.
-  \item \textbf{Still slower than the target alone.} A round costs about 2.2--2.3 target-only steps but yields
-  only $1+\taubar$ tokens, so break-even needs $\taubar\approx1.2$--$1.3$. The estimate (0.89$\times$) is more
-  optimistic than the measurement (0.53$\times$) because it leaves out the $(K{+}1)$-token verify pass, the draft
-  re-reading a growing context (it has no KV cache yet) and per-round overhead.
-\end{enumerate}
-
-\paragraph{Relation to published results.} Papers usually report acceptance length as tokens per target pass,
-which is $1+\taubar$ here. Published EAGLE-2/3 drafts with tree drafting on 8B--70B targets report roughly
-4--6 tokens per pass and 3--6$\times$ speed-ups; chain-style methods such as classic speculative decoding and
-Medusa report about 2--3$\times$. We are at 1.25--1.31 tokens per pass and below 1$\times$. The gap is expected:
-our drafts have seen thousands rather than hundreds of thousands of training conversations, we draft one chain
-of $K=3$ instead of a tree, a 0.6B target makes the draft's relative cost large ($c\approx0.1$), and MPS at batch
-size 1 lacks the kernels and batching of production servers. We therefore compare systems \emph{against each
-other} on the same setup, with $\taubar$ as the headline metric.
+\paragraph{Relation to published results.} Table~\ref{tab:sota} shows the gap. It is expected: our drafts have
+seen thousands rather than hundreds of thousands of training conversations, we draft one chain of $K=3$ instead
+of a tree, a 0.6B target makes the draft's relative cost large ($c\approx0.1$), and MPS at batch size 1 lacks the
+kernels and batching of production servers. We therefore compare systems \emph{against each other} on the same
+setup, with $\taubar$ as the headline metric.
 
 \section{Issues Faced}
 
