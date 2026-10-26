@@ -1,13 +1,25 @@
-"""BP-06: sample pool (backpressure, threshold gate, CPU storage)."""
+"""BP-06: sample pool (backpressure, threshold gate, CPU storage) and the online trainer.
 
+Model tests run the target and drafts in fp32, as BP-05's losslessness checks need.
+"""
+
+import csv
 import threading
 import time
+from pathlib import Path
 
 import pytest
 import torch
+from huggingface_hub import try_to_load_from_cache
 
 from mini_aurora.device import get_device
+from mini_aurora.models.draft import build_draft
+from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
+from mini_aurora.models.vocab import load_vocab_mapping
 from mini_aurora.online.pool import PoolClosed, SamplePool
+from mini_aurora.online.trainer import OnlineTrainer, collate_samples
+from mini_aurora.server.drafter import Drafter
+from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve
 
 from aurora.models.target.eagle3_target_model import Eagle3TargetOutput  # noqa: I001
 
@@ -119,3 +131,57 @@ def test_pool_producer_consumer_threads():
         t.join(10)
     assert seen == list(range(n))
     assert max(sizes) <= 4
+
+
+needs_models = pytest.mark.skipif(
+    not isinstance(try_to_load_from_cache(DEFAULT_TARGET, "config.json"), str) or not Path(DEFAULT_STREAM).exists(),
+    reason=f"{DEFAULT_TARGET} not in the HF cache or BP-02 stream missing",
+)
+
+
+@pytest.fixture(scope="module")
+def models():
+    target, tokenizer = load_target(dtype=torch.float32), load_tokenizer()
+    vocab = load_vocab_mapping()
+    rows = load_requests(DEFAULT_STREAM, 4)
+    drafter = Drafter(build_draft(target, vocab, dtype=torch.float32), k=3)
+    samples = []
+    serve(target, drafter, tokenizer, rows, max_new_tokens=16, on_sample=samples.append)
+    return target, tokenizer, vocab, rows, samples
+
+
+@needs_models
+def test_collate_samples_pads_truncates_and_masks_last(models):
+    samples = models[-1]
+    lengths = [s.input_ids.shape[1] for s in samples[:2]]
+    features, attention_mask = collate_samples(samples[:2])
+    assert features.input_ids.shape == attention_mask.shape == (2, max(lengths))
+    for b, n in enumerate(lengths):
+        assert attention_mask[b, :n].all() and not attention_mask[b, n:].any()
+        assert torch.equal(features.input_ids[b, :n], samples[b].input_ids[0].cpu())
+        assert features.loss_mask[b, n - 1] == 0 and features.loss_mask[b, n - 2] == 1  # last position masked
+        assert torch.equal(features.hidden_states[b, :n], samples[b].hidden_states[0].cpu())
+    features, _ = collate_samples(samples[:1], max_seq_len=10)
+    assert features.input_ids.shape == (1, 10)
+
+
+@needs_models
+def test_trainer_step_fits_pool_samples(models, tmp_path):
+    target, _, vocab, _, samples = models
+    torch.manual_seed(0)
+    pool = SamplePool(max_size=8, buffer_threshold=4)
+    trainer = OnlineTrainer(target, vocab, lr=1e-3, batch_size=2, accumulation=2, log_path=tmp_path / "train_log.csv")
+    assert trainer.samples_per_step == 4
+    losses = []
+    for _ in range(12):
+        for s in samples:
+            pool.put(s)
+        losses.append(trainer.step(pool)["loss"])
+    trainer.close()
+    assert len(pool) == 0 and trainer.step_count == 12
+    assert losses[-1] < 0.7 * losses[0], losses
+    with open(tmp_path / "train_log.csv") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 12 and rows[-1]["step"] == "12"
+    assert {"loss_0", "loss_2", "acc_0", "acc_2", "grad_norm", "lr", "pool_size", "step_s", "mem_gb"} <= set(rows[0])
+    assert float(rows[0]["lr"]) == 1e-3 and int(rows[0]["samples"]) == 4
