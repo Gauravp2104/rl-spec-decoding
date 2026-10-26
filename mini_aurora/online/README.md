@@ -47,35 +47,44 @@ Tracks #14. Branch: `bp/06-online-loop`.
 ## 300-request day-0 run
 
 MacBook Air (16 GB), sync mode, first 300 requests of `data/streams/mixed.jsonl` (104 chat / 100 code / 96 math),
-up to 128 new tokens (mean 114), K = 3, greedy. bf16 target and served draft, fp32 trainer with gradient
-checkpointing, batch 2 × accumulation 1 (one optimizer step per 2 requests, each sample used once), LR 1e-4,
-publish every 5 steps, pool 128 (it never held more than 2).
+up to 128 new tokens (mean 114), K = 3, greedy. **fp32 target and served draft** (the CLI default, as in BP-05),
+fp32 trainer with gradient checkpointing, batch 2 × accumulation 1 (one optimizer step per 2 requests, each sample
+used once), LR 1e-4, publish every 5 steps, pool 128 (it never held more than 2). `--check` compares every output
+with target-only greedy decoding.
 
 ```bash
-caffeinate -i python -m mini_aurora.online.loop --mode sync --start day0 -n 300 --max-new-tokens 128 --bf16 \
-    --batch-size 2 --accumulation 1 --sync-every 5 --out outputs/online/day0_sync_300
+caffeinate -i python -m mini_aurora.online.loop --mode sync --start day0 -n 300 --max-new-tokens 128 \
+    --batch-size 2 --accumulation 1 --sync-every 5 --check --out outputs/online/day0_sync_300_fp32
 ```
+
+**Lossless: 300/300 outputs token-identical to target-only greedy**, across 30 weight publishes.
 
 | Requests | 1–50 | 51–100 | 101–150 | 151–200 | 201–250 | 251–300 |
 |---|---|---|---|---|---|---|
-| Rolling τ̄ (trailing 50) at the end of the block | 0.038 | 0.120 | 0.165 | 0.168 | 0.209 | **0.247** |
+| Rolling τ̄ (trailing 50) at the end of the block | 0.038 | 0.113 | 0.162 | 0.163 | 0.208 | **0.245** |
 
 | | First 50 | Last 50 | All 300 |
 |---|---|---|---|
-| τ̄ | 0.038 | **0.247** | 0.154 |
-| α1 / α2 / α3 | 0.038 / 0 / 0 | 0.216 / 0.028 / 0.003 | 0.144 / 0.009 / 0.001 |
-| tok/s (speculative, bf16) | 13.6 | 16.3 | 15.5 |
+| τ̄ | 0.039 | **0.246** | 0.152 |
+| α1 / α2 / α3 | 0.038 / 0 / 0 | 0.215 / 0.028 / 0.003 | 0.141 / 0.009 / 0.001 |
+| tok/s, speculative / target-only (`--check`) | 17.6 / 33.2 | 15.7 / 29.3 | 16.9 / 31.8 |
 
-Per domain, τ̄ of the first vs last third of its requests: chat 0.053 → 0.128, code 0.069 → 0.219,
-math 0.117 → 0.327. Training: 150 steps, 30 publishes, weighted loss 23.7 → 14.7 (mean of the first / last 10
-steps), training accuracy 0.25 / 0.16 / 0.11 at the end; staleness 0–4 steps (mean 1.96). **Peak MPS 6.04 GB**,
-median step 0.86 s; **wall time 39.1 min** (36.7 min serving, 2.4 min training). Metrics, plots and the
-speed-up estimate: `mini_aurora/eval/README.md` (BP-07).
+Per domain, τ̄ of the first vs last third of its requests: chat 0.050 → 0.126, code 0.074 → 0.226,
+math 0.115 → 0.318. Training: 150 steps, 30 publishes, weighted loss 23.7 → 14.9 (mean of the first / last 10
+steps), training accuracy 0.24 / 0.16 / 0.11 at the end; staleness 0–4 steps (mean 1.96). **Peak MPS 7.52 GB**,
+median step 0.74 s; **wall time 54.6 min**: 33.7 min serving, 2.3 min training and ~18 min of `--check` reference
+decoding. Metrics, plots and the speed-up estimate: `mini_aurora/eval/README.md` (BP-07).
+
+Both throughputs drop ~12% over the hour (the fanless Air slowing under sustained load) while their ratio stays at
+0.53–0.54, so compare tok/s within a run, not across runs; τ̄ is the hardware-independent number.
 
 τ̄ climbs from 0 to ~0.25 in 300 requests (~34K completion tokens) and is still rising; BP-04's static draft
-reaches 0.31 on held-out chat after 896 offline steps. The draft is still a slowdown here (target-only bf16 runs
-at 36.6 tok/s), as BP-05 found: a round here costs ~74 ms ≈ 2.7 target-only steps, so breaking even needs
-τ̄ ≈ 1.7 with this cache-free drafter.
+reaches 0.31 on held-out chat after 896 offline steps. The draft is still a slowdown (×0.53 of target-only), as
+BP-05 found: a round costs ~68 ms ≈ 2.2 target-only steps, so breaking even needs τ̄ ≈ 1.2 with this cache-free
+drafter.
+
+An earlier run with `--bf16` (bf16 target and served draft, same settings, no `--check`) gave the same curve:
+τ̄ 0.038 → 0.247 (first / last 50), 0.154 overall, peak MPS 6.04 GB, 39.1 min.
 
 ```bash
 python -m pytest -q mini_aurora/tests/test_online.py                                         # 16 tests, ~3 min
@@ -107,4 +116,5 @@ Smoke run (MacBook Air, fp32, 20 mixed requests): served and trainer versions st
 
 ### Done when
 
-- [x] A 300-request day-0 run on the mixed stream shows τ̄ rising: rolling τ̄ 0.038 (first 50) → 0.247 (last 50).
+- [x] A 300-request day-0 run on the mixed stream shows τ̄ rising: τ̄ 0.039 (first 50) → 0.246 (last 50), fp32,
+  300/300 lossless.
