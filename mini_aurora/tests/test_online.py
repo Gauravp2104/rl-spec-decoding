@@ -1,4 +1,5 @@
-"""BP-06: sample pool (backpressure, threshold gate, CPU storage), the online trainer and weight publish.
+"""BP-06: sample pool (backpressure, threshold gate, CPU storage), the online trainer, weight publish
+and the day-0 / with-draft start modes.
 
 Model tests run the target and drafts in fp32, as BP-05's losslessness checks need.
 """
@@ -13,11 +14,13 @@ import torch
 from huggingface_hub import try_to_load_from_cache
 
 from mini_aurora.device import get_device
+from mini_aurora.baseline.checkpoint import save_draft
 from mini_aurora.models.draft import build_draft
 from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
 from mini_aurora.models.vocab import load_vocab_mapping
 from mini_aurora.online.pool import PoolClosed, SamplePool
 from mini_aurora.online.publish import WeightSlot, snapshot
+from mini_aurora.online.start import start
 from mini_aurora.online.trainer import OnlineTrainer, collate_samples
 from mini_aurora.server.drafter import Drafter, trainable_state
 from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve
@@ -218,3 +221,21 @@ def test_publish_swaps_trainer_weights_into_served_draft(models):
     slot.publish(snapshot(trainer.draft, trainer.step_count))  # replaces the unapplied version 2
     assert slot.replaced == 1 and slot.apply(drafter) == 3
     assert drafter.version == 3 and _same_weights(trainer.draft, drafter.draft)
+
+
+@needs_models
+def test_start_day0_and_draft_modes(models, tmp_path):
+    target, _, vocab, _, samples = models
+    drafter, trainer = start(target, "day0", vocab, batch_size=2, accumulation=2)
+    assert drafter.version == trainer.step_count == 0 and trainer.lr == 1e-4
+    assert _same_weights(trainer.draft, drafter.draft)  # both copies start from the same fresh weights
+
+    for _ in range(2):
+        trainer.step(samples=samples)
+    save_draft(trainer.draft, tmp_path, trainer.step_count)
+    drafter, resumed = start(target, "draft", vocab, draft_path=tmp_path, batch_size=2, accumulation=2)
+    assert drafter.version == resumed.step_count == 2 and resumed.lr == 1e-5
+    assert _same_weights(trainer.draft, drafter.draft) and _same_weights(trainer.draft, resumed.draft)
+    assert resumed.step(samples=samples)["step"] == 3  # versions continue from the checkpoint's step
+    with pytest.raises(ValueError):
+        start(target, "draft", vocab)
