@@ -3,7 +3,8 @@
     python -m mini_aurora.experiments.table                    # print
     python -m mini_aurora.experiments.table --out results.md   # write
 
-Speed-up is tokens/s relative to the ``target_only`` arm of the same experiment and stream, when present.
+Speed-up is tokens/s relative to the ``target_only`` arm of the same experiment, stream and device, when present
+(tok/s is hardware-bound, so arms are only compared on the same machine; τ̄ is the hardware-independent number).
 """
 
 import argparse
@@ -12,7 +13,7 @@ from pathlib import Path
 
 from mini_aurora.experiments import OUT_DIR
 
-COLUMNS = ["exp", "arm", "stream", "n", "τ̄", "τ̄ first/last 100", "α1 / α2 / α3", "tok/s", "× target-only", "lossless", "draft / loop args"]
+COLUMNS = ["exp", "arm", "stream", "n", "τ̄", "τ̄ first/last 100", "α1 / α2 / α3", "tok/s", "× target-only", "device", "lossless", "draft / loop args"]
 
 
 def load_summaries(out_dir: str | Path = OUT_DIR) -> list[dict]:
@@ -21,12 +22,13 @@ def load_summaries(out_dir: str | Path = OUT_DIR) -> list[dict]:
 
 
 def rows(summaries: list[dict]) -> list[list[str]]:
-    reference = {(s["experiment"], s["stream"]): s["overall"]["tokens_per_s"]
+    reference = {(s["experiment"], s["stream"], s.get("device_name") or s.get("device")): s["overall"]["tokens_per_s"]
                  for s in summaries if s["arm"] == "target_only"}
     table = []
     for s in summaries:
         o = s["overall"]
-        ref = reference.get((s["experiment"], s["stream"]))
+        device = s.get("device_name") or s.get("device") or "–"
+        ref = reference.get((s["experiment"], s["stream"], device))
         windows = s.get("by_window") or []
         first_last = (f"{windows[0]['tau']:.3f} / {windows[-1]['tau']:.3f}"
                       if len(windows) > 1 and "tau" in windows[0] and "tau" in windows[-1] else "–")
@@ -39,6 +41,7 @@ def rows(summaries: list[dict]) -> list[list[str]]:
             " / ".join(f"{a:.3f}" for a in o["alpha"]) if "alpha" in o else "–",
             f"{o['tokens_per_s']:.1f}",
             f"×{o['tokens_per_s'] / ref:.2f}" if ref else "–",
+            device,
             o.get("matches", "–"),
             " ".join(x for x in (draft, setting) if x) or "–",
         ])

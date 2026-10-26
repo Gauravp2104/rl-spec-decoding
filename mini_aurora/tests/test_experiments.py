@@ -47,7 +47,7 @@ def test_summarize_windows_and_domains():
 
 
 def test_table_speedup_against_target_only(tmp_path):
-    base = {"experiment": "E2", "stream": "domain_shift", "claim": "", "arm_desc": ""}
+    base = {"experiment": "E2", "stream": "domain_shift", "claim": "", "arm_desc": "", "device_name": "T4"}
     for name, body in {
         "target_only_domain_shift": {**base, "arm": "target_only", "draft": None,
                                      "overall": {"requests": 4, "new_tokens": 32, "tokens_per_s": 50.0}},
@@ -65,8 +65,8 @@ def test_table_speedup_against_target_only(tmp_path):
     table = rows(load_summaries(tmp_path))
     assert [r[1] for r in table] == ["online_static", "static", "target_only"]
     static = table[1]
-    assert static[5] == "0.200 / 0.400" and static[8] == "×0.60" and static[9] == "4/4" and static[10] == "draft_step000896.pt"
-    assert table[0][10] == "draft_step000896.pt --sync-every 5" and table[0][8] == "×0.50"
+    assert static[5] == "0.200 / 0.400" and static[8] == "×0.60" and static[9] == "T4" and static[10] == "4/4" and static[11] == "draft_step000896.pt"
+    assert table[0][11] == "draft_step000896.pt --sync-every 5" and table[0][8] == "×0.50"
     assert table[2][4] == "–" and table[2][5] == "–"
     md = markdown(table)
     assert md.startswith("| exp |") and md.count("\n") == 4

@@ -133,8 +133,10 @@ def main() -> None:
     out = Path(args.out_dir) / args.experiment / (f"{args.arm}_{stream}" + (f"_{tag}" if tag else ""))
     out.mkdir(parents=True, exist_ok=True)
 
+    device = get_device(args.device)
     meta = {"experiment": args.experiment, "claim": exp["claim"], "arm": args.arm, "arm_desc": ARMS[args.arm],
             "stream": stream, "requests": len(rows), "k": args.k, "max_new_tokens": args.max_new_tokens,
+            "device": device.type, "device_name": torch.cuda.get_device_name(device) if device.type == "cuda" else device.type,
             "draft": str(args.draft) if args.arm in ("static", "online_static") else None,
             "loop_args": extra if args.arm in ONLINE_ARMS else None}
     print(json.dumps(meta, indent=2), flush=True)
@@ -142,11 +144,9 @@ def main() -> None:
     if args.arm in ONLINE_ARMS:
         records, loop_summary = run_online(args.arm, stream_path, out, args.n, args.draft, args.k,
                                            args.max_new_tokens, args.check, extra)
-        meta.update({"device": loop_summary.get("device"), "loop": {k: v for k, v in loop_summary.items() if k != "domains"}})
+        meta["loop"] = {k: v for k, v in loop_summary.items() if k != "domains"}
     else:
-        device = get_device(args.device)
         target, tokenizer = load_target(device=device, dtype=torch.float32), load_tokenizer()
-        meta["device"] = device.type
         with RequestLog(out / "requests.jsonl") as log:
             if args.arm == "target_only":
                 records = serve_target_only(target, tokenizer, rows, args.max_new_tokens, log)
