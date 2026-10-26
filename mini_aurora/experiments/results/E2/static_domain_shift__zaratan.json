@@ -267,5 +267,6 @@
       ],
       "tokens_per_round": 1.248
     }
-  ]
+  ],
+  "device_name": "NVIDIA A100 MIG 1g.5gb"
 }
