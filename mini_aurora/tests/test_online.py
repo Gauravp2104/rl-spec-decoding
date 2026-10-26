@@ -6,6 +6,7 @@ Model tests run the target and drafts in fp32, as BP-05's losslessness checks ne
 """
 
 import csv
+import gc
 import threading
 import time
 from pathlib import Path
@@ -14,7 +15,7 @@ import pytest
 import torch
 from huggingface_hub import try_to_load_from_cache
 
-from mini_aurora.device import get_device
+from mini_aurora.device import empty_cache, get_device
 from mini_aurora.baseline.checkpoint import save_draft
 from mini_aurora.models.draft import build_draft
 from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
@@ -157,6 +158,15 @@ def test_device_lock_is_fifo():
     for t in threads:
         t.join(2)
     assert order == list(range(5))
+
+
+@pytest.fixture(autouse=True, scope="module")
+def release_device_memory():
+    """Return this module's cached MPS memory when it ends: later tests (BP-03's overfit check) measure the
+    process-wide driver allocation and would otherwise count the targets loaded here."""
+    yield
+    gc.collect()
+    empty_cache(get_device())
 
 
 needs_models = pytest.mark.skipif(
