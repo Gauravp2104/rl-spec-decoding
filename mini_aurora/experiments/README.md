@@ -65,6 +65,10 @@ overrides one of them.
 
 <!-- table.py output goes here once the arms have run; per-experiment notes below -->
 
+| exp | arm | stream | n | τ̄ | τ̄ first/last 100 | α1 / α2 / α3 | tok/s | × target-only | lossless | draft / loop args |
+|---|---|---|---|---|---|---|---|---|---|---|
+| E2 | online_static | domain_shift | 1200 | 0.375 | 0.319 / 0.385 | 0.276 / 0.079 / 0.020 | 26.8 | – | – | checkpoints_8ep |
+
 ### E1 — day-0 deployment (mixed stream)
 
 ### E2 — static vs online under domain shift (chat → code → math)
