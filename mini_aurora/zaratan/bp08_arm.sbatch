@@ -14,6 +14,7 @@ WORK="${WORK:-$HOME/rl-work}"
 source "$WORK/venv/bin/activate"
 cd "$WORK/repo"
 export HF_HOME="$WORK/hf" HF_HUB_OFFLINE=1 WANDB_MODE=offline MINI_AURORA_DEVICE=cuda TOKENIZERS_PARALLELISM=false
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 OUT="$WORK/outputs/experiments"
 ARGS=()
 [ -n "${GRID:-}" ] && ARGS+=(--grid "$GRID")
