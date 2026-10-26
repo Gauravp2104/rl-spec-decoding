@@ -1,4 +1,4 @@
-"""Online loop (BP-06 step 5): serve stream requests, push their training samples into the pool, train, publish.
+"""Online loop (BP-06 steps 5-6): serve stream requests, push their training samples into the pool, train, publish.
 
 Sync mode alternates: serve ``serve_batch`` (B) requests through BP-05's ``serve(..., on_sample=pool.put)``, then
 take ``train_steps`` (M) optimizer steps if the pool holds enough samples, publishing every ``sync_every`` (N)
@@ -9,19 +9,53 @@ Backpressure in sync mode: the loop is single-threaded, so a blocking ``put`` on
 Instead, when a sample arrives and the pool is full, the loop trains first (Aurora's generation waits for
 training); no sample is ever dropped.
 
+Async mode runs a serving thread and a training thread that share the pool and the pending weight slot: the
+server blocks on ``put`` while the pool is full (backpressure), the trainer blocks on ``take`` until one optimizer
+step's worth of samples is there, and staleness (trainer version − served version) is whatever the two speeds
+make it. When the stream ends the trainer stops after its current step; samples left in the pool stay untrained,
+as in sync mode. If either thread fails, the pool is closed so the other one wakes up, and the error is re-raised.
+
+The threads share one device, and PyTorch's MPS backend aborts when two threads issue work at once (one command
+stream). So GPU work is serialized by a FIFO ``DeviceLock``: the server holds it for one request (weight swap +
+decoding), the trainer for one optimizer step (+ snapshot). ``put`` / ``take`` happen outside it, so a full pool
+can't deadlock. On one GPU, real overlap would not add throughput anyway; what async keeps is that the trainer
+and the server interleave by their own speeds rather than a fixed B / M schedule, so Δ is measured, not set.
+
 Each request is logged in BP-05's ``RequestLog`` format plus ``index`` (position in this run),
 ``trainer_version`` / ``trainer_version_end`` (trainer steps when the request started / finished; the served
 version of each round is in ``versions``) and ``pool_size`` after its sample was added.
 """
 
+import threading
 import time
 
-from mini_aurora.online.pool import SamplePool
+from mini_aurora.online.pool import PoolClosed, SamplePool
 from mini_aurora.online.publish import WeightSlot, snapshot
 from mini_aurora.online.trainer import OnlineTrainer
 from mini_aurora.server.drafter import Drafter
 from mini_aurora.server.log import RequestLog
 from mini_aurora.server.serve import serve
+
+
+class DeviceLock:
+    """FIFO (ticket) lock: waiters get the device in arrival order, so neither thread starves the other."""
+
+    def __init__(self) -> None:
+        self._cond = threading.Condition()
+        self._next_ticket = 0
+        self._now_serving = 0
+
+    def __enter__(self) -> "DeviceLock":
+        with self._cond:
+            ticket = self._next_ticket
+            self._next_ticket += 1
+            self._cond.wait_for(lambda: self._now_serving == ticket)
+        return self
+
+    def __exit__(self, *exc) -> None:
+        with self._cond:
+            self._now_serving += 1
+            self._cond.notify_all()
 
 
 def mean_tau(records: list[dict]) -> float:
@@ -49,6 +83,7 @@ class OnlineLoop:
     ) -> None:
         self.target, self.tokenizer, self.drafter, self.trainer, self.pool = target, tokenizer, drafter, trainer, pool
         self.slot = WeightSlot()
+        self.device_lock = DeviceLock()
         self.sync_every, self.max_new_tokens = sync_every, max_new_tokens
         self.greedy, self.temperature, self.seed, self.check = greedy, temperature, seed, check
         self.log, self.verbose = log, verbose
@@ -57,20 +92,23 @@ class OnlineLoop:
 
     def serve_one(self, row: dict, index: int, put=None) -> dict:
         """Apply pending weights, serve one request, push its sample with ``put`` (default ``pool.put``)."""
-        self.slot.apply(self.drafter)
-        trainer_version = self.trainer.step_count
-        (record,) = serve(
-            self.target,
-            self.drafter,
-            self.tokenizer,
-            [row],
-            max_new_tokens=self.max_new_tokens,
-            greedy=self.greedy,
-            temperature=self.temperature,
-            seed=self.seed + index,
-            check=self.check,
-            on_sample=put or self.pool.put,
-        )
+        samples = []
+        with self.device_lock:
+            self.slot.apply(self.drafter)
+            trainer_version = self.trainer.step_count
+            (record,) = serve(
+                self.target,
+                self.drafter,
+                self.tokenizer,
+                [row],
+                max_new_tokens=self.max_new_tokens,
+                greedy=self.greedy,
+                temperature=self.temperature,
+                seed=self.seed + index,
+                check=self.check,
+                on_sample=samples.append,
+            )
+        (put or self.pool.put)(samples[0])  # outside the lock: may block on a full pool
         record = {"index": index, **record, "trainer_version": trainer_version,
                   "trainer_version_end": self.trainer.step_count, "pool_size": len(self.pool)}
         self.records.append(record)
@@ -85,10 +123,12 @@ class OnlineLoop:
 
     def train_one(self, timeout: float | None = None) -> dict:
         """One optimizer step from the pool; publish if ``sync_every`` steps have passed."""
-        row = self.trainer.step(self.pool, timeout=timeout)
-        if self.trainer.step_count % self.sync_every == 0:
-            self.slot.publish(snapshot(self.trainer.draft, self.trainer.step_count))
-            row["published"] = True
+        samples = self.pool.take(self.trainer.samples_per_step, timeout)
+        with self.device_lock:
+            row = self.trainer.step(self.pool, samples=samples)
+            if self.trainer.step_count % self.sync_every == 0:
+                self.slot.publish(snapshot(self.trainer.draft, self.trainer.step_count))
+                row["published"] = True
         self.train_rows.append(row)
         if self.verbose:
             print(f"  step {row['step']:4d}  loss {row['loss']:.3f}  acc {' '.join(f'{x:.2f}' for x in row['acces'])}  "
@@ -112,6 +152,44 @@ class OnlineLoop:
                     if not self.pool.can_take(self.trainer.samples_per_step):
                         break
                     self.train_one()
+        return self.summary(time.perf_counter() - start)
+
+    def run_async(self, rows: list[dict]) -> dict:
+        """Serving and training in two threads until every row has been served."""
+        stop, errors = threading.Event(), {}
+
+        def serving() -> None:
+            try:
+                for i, row in enumerate(rows):
+                    self.serve_one(row, i)
+            except PoolClosed:
+                pass  # the trainer failed and closed the pool; its error is raised below
+            except BaseException as e:  # noqa: BLE001
+                errors["serving"] = e
+            finally:
+                stop.set()
+
+        def training() -> None:
+            try:
+                while not stop.is_set():
+                    try:
+                        self.train_one(timeout=0.5)
+                    except TimeoutError:
+                        continue
+            except PoolClosed:
+                pass
+            except BaseException as e:  # noqa: BLE001
+                errors["training"] = e
+                self.pool.close()  # unblock a server waiting on a full pool
+
+        start = time.perf_counter()
+        threads = [threading.Thread(target=serving, name="serving"), threading.Thread(target=training, name="training")]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        for name, error in errors.items():
+            raise RuntimeError(f"{name} thread failed") from error
         return self.summary(time.perf_counter() - start)
 
     def summary(self, seconds: float, window: int = 50) -> dict:

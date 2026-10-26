@@ -1,5 +1,6 @@
 """BP-06: sample pool (backpressure, threshold gate, CPU storage), the online trainer, weight publish,
-the day-0 / with-draft start modes and the sync loop (lossless across hot-swaps).
+the day-0 / with-draft start modes and the sync and async loops (lossless across
+hot-swaps).
 
 Model tests run the target and drafts in fp32, as BP-05's losslessness checks need.
 """
@@ -18,7 +19,7 @@ from mini_aurora.baseline.checkpoint import save_draft
 from mini_aurora.models.draft import build_draft
 from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
 from mini_aurora.models.vocab import load_vocab_mapping
-from mini_aurora.online.loop import OnlineLoop
+from mini_aurora.online.loop import DeviceLock, OnlineLoop
 from mini_aurora.online.pool import PoolClosed, SamplePool
 from mini_aurora.online.publish import WeightSlot, snapshot
 from mini_aurora.online.start import start
@@ -137,6 +138,25 @@ def test_pool_producer_consumer_threads():
         t.join(10)
     assert seen == list(range(n))
     assert max(sizes) <= 4
+
+
+def test_device_lock_is_fifo():
+    lock, order = DeviceLock(), []
+    lock.__enter__()  # held, so the workers queue up in start order
+
+    def worker(i):
+        with lock:
+            order.append(i)
+
+    threads = []
+    for i in range(5):
+        threads.append(threading.Thread(target=worker, args=(i,)))
+        threads[-1].start()
+        time.sleep(0.05)
+    lock.__exit__(None, None, None)
+    for t in threads:
+        t.join(2)
+    assert order == list(range(5))
 
 
 needs_models = pytest.mark.skipif(
@@ -276,3 +296,37 @@ def test_sync_full_pool_trains_instead_of_blocking(models):
     summary = loop.run_sync(rows, serve_batch=100)  # the schedule never trains: only backpressure does
     assert summary["requests"] == 6 and summary["train_steps"] == 2 and len(pool) == 2
     assert pool.total_put == 6 and pool.total_taken == 4  # nothing dropped
+
+
+@needs_models
+def test_async_run_is_lossless_and_logs_staleness(models):
+    target, tokenizer, vocab, _, _ = models
+    torch.manual_seed(0)
+    rows = load_requests(DEFAULT_STREAM, 10)
+    drafter, trainer = start(target, "day0", vocab, lr=1e-3, batch_size=2, accumulation=1)
+    pool = SamplePool(max_size=4, buffer_threshold=2)
+    loop = OnlineLoop(target, tokenizer, drafter, trainer, pool, sync_every=1, max_new_tokens=16, check=True)
+    summary = loop.run_async(rows)
+    records = loop.records
+    assert summary["requests"] == 10 and all(r["match"] for r in records)
+    assert summary["train_steps"] >= 1 and summary["publishes"] == summary["train_steps"]
+    assert pool.total_put == 10 and pool.total_taken + len(pool) == 10  # nothing dropped
+    for r in records:
+        assert r["trainer_version"] <= r["trainer_version_end"]
+        assert all(0 <= r["trainer_version"] - v for v in r["versions"])  # the server never runs ahead
+
+
+@needs_models
+def test_async_trainer_failure_does_not_hang(models):
+    target, tokenizer, vocab, _, _ = models
+    rows = load_requests(DEFAULT_STREAM, 6)
+    drafter, trainer = start(target, "day0", vocab, batch_size=2, accumulation=1)
+
+    def broken_step(*args, **kwargs):
+        raise FloatingPointError("boom")
+
+    trainer.step = broken_step
+    loop = OnlineLoop(target, tokenizer, drafter, trainer, SamplePool(max_size=2, buffer_threshold=2), max_new_tokens=8)
+    with pytest.raises(RuntimeError, match="training thread failed"):
+        loop.run_async(rows)
+    assert len(loop.records) < 6  # serving stopped once the pool was closed
