@@ -1,5 +1,5 @@
-"""BP-07: metrics, the metrics.csv / summary.json writer and the plots on a small hand-written online log, and a
-losslessness regression test for the online loop.
+"""BP-07: metrics, the metrics.csv / summary.json writer and the plots on a small hand-written online log; the
+latency bench; and a losslessness regression test for the online loop.
 
 The hand-written log has 4 requests (K = 3, chat then code). Over all 8 rounds the accepted lengths are
 [0, 1 | 3, 3 | 2 | 0, 0, 1], so τ̄ = 10 / 8, α = (5/8, 3/8, 2/8), acceptance rate = 10 / 24, and staleness per round
@@ -14,6 +14,7 @@ import pytest
 import torch
 from huggingface_hub import try_to_load_from_cache
 
+from mini_aurora.eval.bench import run_bench
 from mini_aurora.eval.metrics import (
     acceptance_rate,
     alpha_windows,
@@ -31,11 +32,13 @@ from mini_aurora.eval.metrics import (
     tau,
     tokens_per_s,
 )
+from mini_aurora.models.draft import build_draft
 from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
 from mini_aurora.models.vocab import load_vocab_mapping
 from mini_aurora.online.loop import OnlineLoop
 from mini_aurora.online.pool import SamplePool
 from mini_aurora.online.start import start
+from mini_aurora.server.drafter import Drafter
 from mini_aurora.server.log import RequestLog, acceptance_by_position
 from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, summarize
 
@@ -183,3 +186,12 @@ def test_online_run_is_lossless(mode, tmp_path):
     assert summary["all"]["matches"] == "8/8"
     assert len({v for r in load_run(tmp_path)["records"] for v in r["versions"]}) >= 2  # weights were swapped
 
+
+@needs_models
+def test_bench_measures_c():
+    target, tokenizer = load_target(dtype=torch.float32), load_tokenizer()
+    drafter = Drafter(build_draft(target, load_vocab_mapping(), dtype=torch.float32), k=3)
+    result = run_bench(target, drafter, tokenizer, load_requests(DEFAULT_STREAM, 2), k=3, max_new_tokens=8, repeats=3)
+    assert result["c"] > 0 and result["target_step_ms"] > 0 and result["draft_step_ms"] > 0
+    assert result["c"] == pytest.approx(result["draft_step_ms"] / result["target_step_ms"], rel=0.01)
+    assert result["target_tokens_per_s"] > 0 and len(result["per_prompt"]) == 2
