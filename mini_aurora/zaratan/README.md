@@ -22,7 +22,7 @@ are unchanged.
 ```bash
 ssh zaratan                                                   # MFA, once
 mkdir -p ~/scratch.msai635/rl-spec-decoding && git clone https://github.com/Gauravp2104/rl-spec-decoding ~/scratch.msai635/rl-spec-decoding/repo && cd ~/scratch.msai635/rl-spec-decoding/repo
-bash mini_aurora/zaratan/setup_env.sh                         # login node: venv, data + models in scratch (home is 10 GB)
+bash mini_aurora/zaratan/setup_env.sh                         # login node: uv + CPython 3.12 venv (Aurora needs >= 3.12; the cluster module is 3.10), data + models, all in scratch
 sbatch mini_aurora/zaratan/bp09_1p7b.sbatch                   # smoke: 20 conversations, 1 epoch, ≤ 25 min walltime
 sbatch -t 2:00:00 --export=ALL,LIMIT=,EPOCHS=8 mini_aurora/zaratan/bp09_1p7b.sbatch   # full run + held-out τ̄
 squeue -u $USER; sacct -j <jobid> --format=JobID,Elapsed,AllocTRES%40,State -X

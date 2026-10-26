@@ -7,15 +7,16 @@ cd "$(dirname "$0")/../.."
 SCRATCH="${SCRATCH:-$HOME/scratch.msai635/rl-spec-decoding}"
 VENV="${VENV:-$SCRATCH/venv}"
 
-source /etc/profile
-module load python/3.10.10
-unset PYTHONPATH                      # the module leaks its own site-packages
-[ -d "$VENV" ] || python -m venv "$VENV"
+# Aurora needs Python >= 3.12 and Zaratan's newest python module is 3.10, so uv fetches a standalone CPython 3.12
+# (everything under scratch: home is 10 GB).
+export UV_INSTALL_DIR="$SCRATCH/bin" UV_PYTHON_INSTALL_DIR="$SCRATCH/uv-python" UV_CACHE_DIR="$SCRATCH/uv-cache"
+[ -x "$SCRATCH/bin/uv" ] || curl -LsSf https://astral.sh/uv/install.sh | sh
+UV="$SCRATCH/bin/uv"
+[ -d "$VENV" ] || "$UV" venv --python 3.12 "$VENV"
 source "$VENV/bin/activate"
-pip install -q --upgrade pip
-pip install -q torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu124
-grep -v '^torch\|^#' mini_aurora/requirements-mac.txt | sed 's/#.*//' | xargs pip install -q
-pip install -q -e aurora-main --no-deps -e . --no-deps
+"$UV" pip install -q torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu124
+grep -v '^torch\|^#' mini_aurora/requirements-mac.txt | sed 's/#.*//' | xargs "$UV" pip install -q
+"$UV" pip install -q -e aurora-main --no-deps -e . --no-deps
 
 mkdir -p "$SCRATCH/hf" "$SCRATCH/outputs"
 export HF_HOME="$SCRATCH/hf" WANDB_MODE=offline
