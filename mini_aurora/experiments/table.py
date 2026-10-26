@@ -12,12 +12,12 @@ from pathlib import Path
 
 from mini_aurora.experiments import OUT_DIR
 
-COLUMNS = ["exp", "arm", "stream", "n", "τ̄", "α1 / α2 / α3", "tok/s", "× target-only", "lossless", "draft"]
+COLUMNS = ["exp", "arm", "stream", "n", "τ̄", "τ̄ first/last 100", "α1 / α2 / α3", "tok/s", "× target-only", "lossless", "draft / loop args"]
 
 
 def load_summaries(out_dir: str | Path = OUT_DIR) -> list[dict]:
-    return sorted((json.loads(p.read_text()) for p in Path(out_dir).glob("E*/*.json")),
-                  key=lambda s: (s["experiment"], s["stream"], s["arm"], s.get("draft") or ""))
+    return sorted((json.loads(p.read_text()) for p in Path(out_dir).glob("E*/*/summary.json")),
+                  key=lambda s: (s["experiment"], s["stream"], s["arm"], " ".join(s.get("loop_args") or []), s.get("draft") or ""))
 
 
 def rows(summaries: list[dict]) -> list[list[str]]:
@@ -27,14 +27,20 @@ def rows(summaries: list[dict]) -> list[list[str]]:
     for s in summaries:
         o = s["overall"]
         ref = reference.get((s["experiment"], s["stream"]))
+        windows = s.get("by_window") or []
+        first_last = (f"{windows[0]['tau']:.3f} / {windows[-1]['tau']:.3f}"
+                      if len(windows) > 1 and "tau" in windows[0] and "tau" in windows[-1] else "–")
+        setting = " ".join(s["loop_args"]) if s.get("loop_args") else ""
+        draft = Path(s["draft"]).name if s.get("draft") else ""
         table.append([
             s["experiment"], s["arm"], s["stream"], str(o["requests"]),
             f"{o['tau']:.3f}" if "tau" in o else "–",
+            first_last,
             " / ".join(f"{a:.3f}" for a in o["alpha"]) if "alpha" in o else "–",
             f"{o['tokens_per_s']:.1f}",
             f"×{o['tokens_per_s'] / ref:.2f}" if ref else "–",
             o.get("matches", "–"),
-            Path(s["draft"]).name if s.get("draft") else "–",
+            " ".join(x for x in (draft, setting) if x) or "–",
         ])
     return table
 
