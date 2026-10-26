@@ -1,4 +1,4 @@
-"""BP-07: metrics and the metrics.csv / summary.json writer on a small hand-written online log.
+"""BP-07: metrics, the metrics.csv / summary.json writer and the plots on a small hand-written online log.
 
 The hand-written log has 4 requests (K = 3, chat then code). Over all 8 rounds the accepted lengths are
 [0, 1 | 3, 3 | 2 | 0, 0, 1], so τ̄ = 10 / 8, α = (5/8, 3/8, 2/8), acceptance rate = 10 / 24, and staleness per round
@@ -129,3 +129,19 @@ def test_evaluate_run_writes_csv_and_summary(tmp_path):
     assert [row["request_id"] for row in rows] == ["a", "b", "c", "d"]
     assert {"tau", "acceptance_rate", "staleness_mean", "rolling_tau_2", "rolling_alpha1_2"} <= set(rows[0])
     assert summary["all"]["c"] == 0.2 and summary["all"]["target_tokens_per_s"] == 11.0
+
+
+def test_plot_run_writes_every_figure(tmp_path, monkeypatch):
+    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / "mpl"))
+    from mini_aurora.eval.plot import moving_average, plot_run
+
+    assert moving_average([1, 3, 5, 7], 2) == [1, 2, 4, 6]
+    (tmp_path / "requests.jsonl").write_text("".join(json.dumps(r) + "\n" for r in RECORDS))
+    with open(tmp_path / "train_log.csv", "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(TRAIN[0]))
+        writer.writeheader()
+        writer.writerows(TRAIN)
+    paths = plot_run(tmp_path, window=2)
+    assert [p.name for p in paths] == ["rolling_tau.png", "alpha.png", "staleness.png", "loss.png", "tokens_per_s.png"]
+    assert all(p.stat().st_size > 1000 for p in paths)
+    assert (tmp_path / "eval" / "metrics.csv").exists() and (tmp_path / "eval" / "summary.json").exists()
