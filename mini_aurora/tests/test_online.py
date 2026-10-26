@@ -1,5 +1,5 @@
-"""BP-06: sample pool (backpressure, threshold gate, CPU storage), the online trainer, weight publish
-and the day-0 / with-draft start modes.
+"""BP-06: sample pool (backpressure, threshold gate, CPU storage), the online trainer, weight publish,
+the day-0 / with-draft start modes and the sync loop (lossless across hot-swaps).
 
 Model tests run the target and drafts in fp32, as BP-05's losslessness checks need.
 """
@@ -18,11 +18,13 @@ from mini_aurora.baseline.checkpoint import save_draft
 from mini_aurora.models.draft import build_draft
 from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
 from mini_aurora.models.vocab import load_vocab_mapping
+from mini_aurora.online.loop import OnlineLoop
 from mini_aurora.online.pool import PoolClosed, SamplePool
 from mini_aurora.online.publish import WeightSlot, snapshot
 from mini_aurora.online.start import start
 from mini_aurora.online.trainer import OnlineTrainer, collate_samples
 from mini_aurora.server.drafter import Drafter, trainable_state
+from mini_aurora.server.log import RequestLog, read_log
 from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve
 
 from aurora.models.target.eagle3_target_model import Eagle3TargetOutput  # noqa: I001
@@ -239,3 +241,38 @@ def test_start_day0_and_draft_modes(models, tmp_path):
     assert resumed.step(samples=samples)["step"] == 3  # versions continue from the checkpoint's step
     with pytest.raises(ValueError):
         start(target, "draft", vocab)
+
+
+@needs_models
+def test_sync_run_is_lossless_across_hot_swaps(models, tmp_path):
+    target, tokenizer, vocab, _, _ = models
+    torch.manual_seed(0)
+    rows = load_requests(DEFAULT_STREAM, 10)
+    drafter, trainer = start(target, "day0", vocab, lr=1e-3, batch_size=2, accumulation=1,
+                             log_path=tmp_path / "train_log.csv")
+    pool = SamplePool(max_size=8, buffer_threshold=2)
+    with RequestLog(tmp_path / "requests.jsonl") as log:
+        loop = OnlineLoop(target, tokenizer, drafter, trainer, pool, sync_every=1, max_new_tokens=16, check=True, log=log)
+        summary = loop.run_sync(rows, serve_batch=2, train_steps=1)
+    trainer.close()
+    records = read_log(tmp_path / "requests.jsonl")
+    assert len(records) == summary["requests"] == 10
+    assert all(r["match"] for r in records), "greedy output must equal target-only decoding across hot-swaps"
+    assert summary["train_steps"] == summary["publishes"] == 5
+    assert drafter.version == 4 and loop.slot.published_version == 5  # the last publish came after the last request
+    served = [r["versions"][0] for r in records if r["versions"]]
+    assert served == sorted(served) and len(set(served)) >= 4  # the served draft changed between requests
+    assert all(v == r["trainer_version"] for r in records for v in r["versions"])  # sync: a publish lands at once
+    assert [r["index"] for r in records] == list(range(10))
+
+
+@needs_models
+def test_sync_full_pool_trains_instead_of_blocking(models):
+    target, tokenizer, vocab, _, _ = models
+    rows = load_requests(DEFAULT_STREAM, 6)
+    drafter, trainer = start(target, "day0", vocab, batch_size=2, accumulation=1)
+    pool = SamplePool(max_size=2, buffer_threshold=2)
+    loop = OnlineLoop(target, tokenizer, drafter, trainer, pool, sync_every=100, max_new_tokens=8)
+    summary = loop.run_sync(rows, serve_batch=100)  # the schedule never trains: only backpressure does
+    assert summary["requests"] == 6 and summary["train_steps"] == 2 and len(pool) == 2
+    assert pool.total_put == 6 and pool.total_taken == 4  # nothing dropped
