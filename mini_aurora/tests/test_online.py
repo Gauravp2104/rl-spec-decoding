@@ -1,4 +1,4 @@
-"""BP-06: sample pool (backpressure, threshold gate, CPU storage) and the online trainer.
+"""BP-06: sample pool (backpressure, threshold gate, CPU storage), the online trainer and weight publish.
 
 Model tests run the target and drafts in fp32, as BP-05's losslessness checks need.
 """
@@ -17,8 +17,9 @@ from mini_aurora.models.draft import build_draft
 from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
 from mini_aurora.models.vocab import load_vocab_mapping
 from mini_aurora.online.pool import PoolClosed, SamplePool
+from mini_aurora.online.publish import WeightSlot, snapshot
 from mini_aurora.online.trainer import OnlineTrainer, collate_samples
-from mini_aurora.server.drafter import Drafter
+from mini_aurora.server.drafter import Drafter, trainable_state
 from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve
 
 from aurora.models.target.eagle3_target_model import Eagle3TargetOutput  # noqa: I001
@@ -185,3 +186,35 @@ def test_trainer_step_fits_pool_samples(models, tmp_path):
     assert len(rows) == 12 and rows[-1]["step"] == "12"
     assert {"loss_0", "loss_2", "acc_0", "acc_2", "grad_norm", "lr", "pool_size", "step_s", "mem_gb"} <= set(rows[0])
     assert float(rows[0]["lr"]) == 1e-3 and int(rows[0]["samples"]) == 4
+
+
+def _same_weights(a, b) -> bool:
+    sa, sb = trainable_state(a), trainable_state(b)
+    return sa.keys() == sb.keys() and all(torch.equal(sa[k], sb[k]) for k in sa)
+
+
+@needs_models
+def test_publish_swaps_trainer_weights_into_served_draft(models):
+    target, _, vocab, _, samples = models
+    torch.manual_seed(1)
+    trainer = OnlineTrainer(target, vocab, lr=1e-3, batch_size=2, accumulation=2)
+    drafter = Drafter(build_draft(target, vocab, dtype=torch.float32), k=3)
+    slot = WeightSlot()
+    assert slot.apply(drafter) is None and drafter.version == 0
+    assert not _same_weights(trainer.draft, drafter.draft)
+
+    trainer.step(samples=samples)
+    slot.publish(snapshot(trainer.draft, trainer.step_count))
+    assert slot.published_version == 1 and drafter.version == 0  # nothing changes until the server applies it
+    assert slot.apply(drafter) == 1
+    assert drafter.version == 1 and _same_weights(trainer.draft, drafter.draft)
+    assert slot.apply(drafter) is None  # the slot is emptied by apply
+
+    trainer.step(samples=samples)  # later trainer steps don't leak into the served copy
+    assert not _same_weights(trainer.draft, drafter.draft) and drafter.version == 1
+
+    trainer.step(samples=samples)
+    slot.publish(snapshot(trainer.draft, 2))
+    slot.publish(snapshot(trainer.draft, trainer.step_count))  # replaces the unapplied version 2
+    assert slot.replaced == 1 and slot.apply(drafter) == 3
+    assert drafter.version == 3 and _same_weights(trainer.draft, drafter.draft)
