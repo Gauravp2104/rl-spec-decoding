@@ -267,6 +267,5 @@
       ],
       "tokens_per_round": 1.248
     }
-  ],
-  "device_name": "Tesla T4"
+  ]
 }

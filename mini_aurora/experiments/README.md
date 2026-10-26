@@ -67,9 +67,10 @@ overrides one of them.
 
 | exp | arm | stream | n | τ̄ | τ̄ first/last 100 | α1 / α2 / α3 | tok/s | × target-only | device | lossless | draft / loop args |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| E2 | online_static | domain_shift | 1200 | 0.375 | 0.319 / 0.385 | 0.276 / 0.079 / 0.020 | 26.8 | – | Tesla T4 | – | checkpoints_8ep |
-| E2 | static | domain_shift | 1200 | 0.327 | 0.315 / 0.242 | 0.246 / 0.065 / 0.016 | 25.1 | – | Tesla T4 | – | draft_step000896.pt |
-| E2 | target_only | domain_shift | 1200 | – | – | – | 32.1 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
+| E2 | online_static | domain_shift | 1200 | 0.375 | 0.319 / 0.385 | 0.276 / 0.079 / 0.020 | 26.8 | – | – | – | checkpoints_8ep |
+| E2 | static | domain_shift | 1200 | 0.327 | 0.315 / 0.242 | 0.246 / 0.065 / 0.016 | 25.1 | ×0.78 | cuda | – | draft_step000896.pt |
+| E2 | static | domain_shift | 1200 | 0.327 | 0.315 / 0.242 | 0.246 / 0.065 / 0.016 | 26.9 | ×0.84 | cuda | – | draft_step000896.pt |
+| E2 | target_only | domain_shift | 1200 | – | – | – | 32.1 | ×1.00 | cuda | – | – |
 
 ### E1 — day-0 deployment (mixed stream)
 

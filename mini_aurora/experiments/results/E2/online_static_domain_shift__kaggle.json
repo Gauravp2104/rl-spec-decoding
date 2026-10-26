@@ -9,7 +9,7 @@
   "max_new_tokens": 128,
   "draft": "outputs/baseline/checkpoints_8ep",
   "loop_args": [],
-  "device": "cuda",
+  "device": null,
   "loop": {
     "requests": 1200,
     "train_steps": 150,
@@ -280,6 +280,5 @@
       ],
       "tokens_per_round": 1.39
     }
-  ],
-  "device_name": "Tesla T4"
+  ]
 }

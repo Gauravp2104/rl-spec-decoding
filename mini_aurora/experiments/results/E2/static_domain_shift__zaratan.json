@@ -1,0 +1,271 @@
+{
+  "experiment": "E2",
+  "claim": "Online adaptation beats static under shift",
+  "arm": "static",
+  "arm_desc": "BP-04 static draft, no training",
+  "stream": "domain_shift",
+  "requests": 1200,
+  "k": 3,
+  "max_new_tokens": 128,
+  "draft": "outputs/baseline/checkpoints_8ep/draft_step000896.pt",
+  "loop_args": null,
+  "device": "cuda",
+  "draft_version": 896,
+  "elapsed_s": 5045.6,
+  "overall": {
+    "requests": 1200,
+    "new_tokens": 135819,
+    "tokens_per_s": 26.9,
+    "tau": 0.327,
+    "alpha": [
+      0.246,
+      0.065,
+      0.016
+    ],
+    "tokens_per_round": 1.33
+  },
+  "by_domain": {
+    "chat": {
+      "requests": 600,
+      "new_tokens": 67139,
+      "tokens_per_s": 23.3,
+      "tau": 0.324,
+      "alpha": [
+        0.249,
+        0.061,
+        0.015
+      ],
+      "tokens_per_round": 1.33
+    },
+    "code": {
+      "requests": 300,
+      "new_tokens": 32026,
+      "tokens_per_s": 34.6,
+      "tau": 0.419,
+      "alpha": [
+        0.307,
+        0.091,
+        0.021
+      ],
+      "tokens_per_round": 1.419
+    },
+    "math": {
+      "requests": 300,
+      "new_tokens": 36654,
+      "tokens_per_s": 29.7,
+      "tau": 0.259,
+      "alpha": [
+        0.194,
+        0.051,
+        0.013
+      ],
+      "tokens_per_round": 1.262
+    }
+  },
+  "by_window": [
+    {
+      "start": 0,
+      "end": 100,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11305,
+      "tokens_per_s": 23.2,
+      "tau": 0.315,
+      "alpha": [
+        0.246,
+        0.057,
+        0.013
+      ],
+      "tokens_per_round": 1.32
+    },
+    {
+      "start": 100,
+      "end": 200,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11364,
+      "tokens_per_s": 23.8,
+      "tau": 0.323,
+      "alpha": [
+        0.247,
+        0.059,
+        0.016
+      ],
+      "tokens_per_round": 1.328
+    },
+    {
+      "start": 200,
+      "end": 300,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11327,
+      "tokens_per_s": 23.0,
+      "tau": 0.343,
+      "alpha": [
+        0.257,
+        0.068,
+        0.018
+      ],
+      "tokens_per_round": 1.348
+    },
+    {
+      "start": 300,
+      "end": 400,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 10976,
+      "tokens_per_s": 22.7,
+      "tau": 0.326,
+      "alpha": [
+        0.253,
+        0.059,
+        0.014
+      ],
+      "tokens_per_round": 1.331
+    },
+    {
+      "start": 400,
+      "end": 500,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 10626,
+      "tokens_per_s": 22.8,
+      "tau": 0.316,
+      "alpha": [
+        0.242,
+        0.06,
+        0.015
+      ],
+      "tokens_per_round": 1.322
+    },
+    {
+      "start": 500,
+      "end": 600,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11541,
+      "tokens_per_s": 24.1,
+      "tau": 0.324,
+      "alpha": [
+        0.248,
+        0.061,
+        0.014
+      ],
+      "tokens_per_round": 1.329
+    },
+    {
+      "start": 600,
+      "end": 700,
+      "domains": [
+        "code"
+      ],
+      "requests": 100,
+      "new_tokens": 10515,
+      "tokens_per_s": 34.5,
+      "tau": 0.413,
+      "alpha": [
+        0.303,
+        0.088,
+        0.021
+      ],
+      "tokens_per_round": 1.413
+    },
+    {
+      "start": 700,
+      "end": 800,
+      "domains": [
+        "code"
+      ],
+      "requests": 100,
+      "new_tokens": 11066,
+      "tokens_per_s": 34.5,
+      "tau": 0.41,
+      "alpha": [
+        0.301,
+        0.09,
+        0.02
+      ],
+      "tokens_per_round": 1.411
+    },
+    {
+      "start": 800,
+      "end": 900,
+      "domains": [
+        "code"
+      ],
+      "requests": 100,
+      "new_tokens": 10445,
+      "tokens_per_s": 35.0,
+      "tau": 0.436,
+      "alpha": [
+        0.318,
+        0.096,
+        0.023
+      ],
+      "tokens_per_round": 1.435
+    },
+    {
+      "start": 900,
+      "end": 1000,
+      "domains": [
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 12257,
+      "tokens_per_s": 29.7,
+      "tau": 0.262,
+      "alpha": [
+        0.194,
+        0.054,
+        0.015
+      ],
+      "tokens_per_round": 1.265
+    },
+    {
+      "start": 1000,
+      "end": 1100,
+      "domains": [
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 12024,
+      "tokens_per_s": 30.1,
+      "tau": 0.273,
+      "alpha": [
+        0.203,
+        0.056,
+        0.014
+      ],
+      "tokens_per_round": 1.275
+    },
+    {
+      "start": 1100,
+      "end": 1200,
+      "domains": [
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 12373,
+      "tokens_per_s": 29.3,
+      "tau": 0.242,
+      "alpha": [
+        0.187,
+        0.045,
+        0.01
+      ],
+      "tokens_per_round": 1.248
+    }
+  ]
+}

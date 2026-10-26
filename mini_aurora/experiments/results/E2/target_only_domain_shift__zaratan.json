@@ -154,6 +154,5 @@
       "new_tokens": 12373,
       "tokens_per_s": 32.6
     }
-  ],
-  "device_name": "NVIDIA A100 MIG 1g.5gb"
+  ]
 }
