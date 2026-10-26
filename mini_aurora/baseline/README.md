@@ -93,6 +93,22 @@ Median step 1.25 s, peak allocated memory 2.4 GB; train accuracy at the end 0.33
 - Epoch 2 of this run (0.245) beats the 2-epoch run's final (0.192) at the same step count: with a longer schedule
   the learning rate stays higher for longer.
 
+### Frozen static baseline: release `bp04-static-v1`
+
+The 8-epoch checkpoint everyone downstream (BP-06 with-draft start, BP-08 E2/E3, the GRPO arm) should load is
+published as a GitHub release, so all runs start from the same bytes:
+
+```bash
+gh release download bp04-static-v1 -R Gauravp2104/rl-spec-decoding -D outputs/baseline/checkpoints_8ep
+shasum -a 256 outputs/baseline/checkpoints_8ep/bp04_static_draft_step000896.pt   # 89f66983d6d0cdc28e81ee9a34c29c1b5254c0e1b66a678a97da5c11b67b7e4d
+python -m mini_aurora.server.serve -n 100 --heldout --check --draft outputs/baseline/checkpoints_8ep/bp04_static_draft_step000896.pt
+```
+
+It was trained on a Kaggle T4 with the defaults above (`mini_aurora/baseline/kaggle/push.py`): held-out acc
+0.311 / 0.271 / 0.248, BP-05 τ̄ 0.315 (α 0.243 / 0.058 / 0.014), 100/100 lossless, reproducing the MPS numbers
+below to three decimals. The release also carries `eval.json`, `train_log.csv`, the server check log and timings
+(dump 418 s, train 2148 s, serve 934 s on the T4).
+
 ### Live acceptance on held-out chat (BP-05): done-when
 
 BP-05's server (`bp/05-spec-server`) on the 100 held-out chat conversations (`chat-00900` … `chat-00999`), greedy,
