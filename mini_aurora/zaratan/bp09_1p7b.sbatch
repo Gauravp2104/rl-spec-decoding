@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=bp09-1p7b
+#SBATCH -A msai635-class
 #SBATCH --partition=gpu
 #SBATCH --gpus=a100:1
 #SBATCH --cpus-per-task=4
@@ -14,10 +15,10 @@
 source /etc/profile
 module load python/3.10.10
 unset PYTHONPATH
-source "${VENV:-$HOME/envs/mini-aurora}/bin/activate"
-cd "${REPO:-$HOME/rl-spec-decoding}"
+SCRATCH="${SCRATCH:-$HOME/scratch.msai635/rl-spec-decoding}"
+source "${VENV:-$SCRATCH/venv}/bin/activate"
+cd "${REPO:-$SCRATCH/repo}"
 
-SCRATCH="${SCRATCH:-$HOME/scratch.msml612/rl-spec-decoding}"
 LIMIT="${LIMIT-20}"          # LIMIT= (empty) for the whole chat pool
 EPOCHS="${EPOCHS:-1}"
 OUT="$SCRATCH/outputs/1p7b${LIMIT:+_limit$LIMIT}_${EPOCHS}ep"

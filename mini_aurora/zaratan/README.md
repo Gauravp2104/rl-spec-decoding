@@ -21,8 +21,8 @@ are unchanged.
 
 ```bash
 ssh zaratan                                                   # MFA, once
-git clone https://github.com/Gauravp2104/rl-spec-decoding ~/rl-spec-decoding && cd ~/rl-spec-decoding
-bash mini_aurora/zaratan/setup_env.sh                         # login node: venv in $HOME, data + models in scratch
+mkdir -p ~/scratch.msai635/rl-spec-decoding && git clone https://github.com/Gauravp2104/rl-spec-decoding ~/scratch.msai635/rl-spec-decoding/repo && cd ~/scratch.msai635/rl-spec-decoding/repo
+bash mini_aurora/zaratan/setup_env.sh                         # login node: venv, data + models in scratch (home is 10 GB)
 sbatch mini_aurora/zaratan/bp09_1p7b.sbatch                   # smoke: 20 conversations, 1 epoch, ≤ 25 min walltime
 sbatch -t 2:00:00 --export=ALL,LIMIT=,EPOCHS=8 mini_aurora/zaratan/bp09_1p7b.sbatch   # full run + held-out τ̄
 squeue -u $USER; sacct -j <jobid> --format=JobID,Elapsed,AllocTRES%40,State -X
@@ -30,7 +30,7 @@ squeue -u $USER; sacct -j <jobid> --format=JobID,Elapsed,AllocTRES%40,State -X
 
 Cost: one A100 hour = 48 SU, charged for elapsed time. The smoke run is capped at 25 min (≤ 20 SU) and prints
 its stage timings, from which the full run's cost is extrapolated before submitting it (expected 1–1.5 h,
-50–75 SU). Outputs go to `~/scratch.msml612/rl-spec-decoding/outputs/1p7b*/` (checkpoint, eval.json,
+50–75 SU). Jobs are charged to `msai635-class`. Outputs go to `~/scratch.msai635/rl-spec-decoding/outputs/1p7b*/` (checkpoint, eval.json,
 evaluate.json, serve_heldout.*, timings.json); the 1.7B feature dump is deleted at the end of the job.
 
 ## Results

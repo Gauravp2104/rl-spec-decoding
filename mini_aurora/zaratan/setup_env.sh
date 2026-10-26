@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-time setup on a Zaratan LOGIN node (has internet): venv in $HOME, data + model in scratch.
+# One-time setup on a Zaratan LOGIN node (has internet): venv, data and models in scratch (home is 10 GB).
 #   bash mini_aurora/zaratan/setup_env.sh
 # Afterwards: sbatch mini_aurora/zaratan/bp09_1p7b.sbatch
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-SCRATCH="${SCRATCH:-$HOME/scratch.msml612/rl-spec-decoding}"
-VENV="${VENV:-$HOME/envs/mini-aurora}"
+SCRATCH="${SCRATCH:-$HOME/scratch.msai635/rl-spec-decoding}"
+VENV="${VENV:-$SCRATCH/venv}"
 
 source /etc/profile
 module load python/3.10.10
