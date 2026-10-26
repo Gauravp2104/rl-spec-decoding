@@ -9,12 +9,19 @@
 \usepackage{enumitem}
 \usepackage{caption}
 \usepackage{float}
+\usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
 \usepackage[colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
 
-\setlist{itemsep=1pt,topsep=3pt}
+\setlist{itemsep=0pt,topsep=2pt,parsep=0pt}
+\usepackage[compact]{titlesec}
+\titlespacing*{\section}{0pt}{8pt}{4pt}
+\titlespacing*{\paragraph}{0pt}{4pt}{0.8em}
+\setlength{\textfloatsep}{8pt plus 2pt}
+\setlength{\floatsep}{6pt plus 2pt}
+\setlength{\intextsep}{6pt plus 2pt}
 \captionsetup{font=small,labelfont=bf}
 \newcommand{\taubar}{\bar{\tau}}
 \newcommand{\code}[1]{\texttt{\small #1}}
@@ -43,29 +50,26 @@ objective that rewards accepted length directly.
 
 \paragraph{Change of plan since the proposal.} The full Aurora stack needs about six 80\,GB GPUs for Qwen3-8B
 (SGLang at TP=4 plus two FSDP training GPUs) and is CUDA-only (SGLang, Mooncake, Ray, FSDP2, FlexAttention).
-Before changing the objective we need a working, measurable forward-KL baseline that we fully control. We
-therefore split the project into two phases:
+We first need a working forward-KL baseline that we fully control, so the project has two phases:
 \begin{enumerate}
-  \item \textbf{Base-paper reproduction (in progress):} Aurora's online EAGLE-3 training, scaled down to
-  Qwen3-0.6B on a single Apple M5 Pro laptop (24\,GB unified memory, PyTorch MPS backend). We keep Aurora's
-  algorithm and reuse its model, loss and data code, and replace only the serving and orchestration
-  infrastructure. This phase is organised as nine sub-tasks (BP-01 to BP-09), each with its own issue,
-  branch and pull request.
+  \item \textbf{Base-paper reproduction (nearly complete):} Aurora's online EAGLE-3 training, scaled down to
+  Qwen3-0.6B on Apple-silicon laptops (PyTorch MPS backend). We reuse Aurora's model, loss and data code
+  and replace only the serving and orchestration infrastructure, in nine sub-tasks (BP-01 to BP-09).
   \item \textbf{GRPO extension (next):} the off-policy GRPO objective from the proposal, built on the
   reproduction. The reproduction already logs the quantities GRPO needs: per-round accepted length (the
-  reward) and the draft version that produced each guess (the staleness $\Delta$).
+  reward) and, for every round, the served draft version and the trainer's version (the staleness $\Delta$).
 \end{enumerate}
 
 \section{Progress So Far}
 
-Five of the nine base-paper sub-tasks are complete and merged. Each has a concrete ``done when'' criterion,
-summarised in Table~\ref{tab:progress}.
+Seven of the nine base-paper sub-tasks are complete and merged (Table~\ref{tab:progress}); each has a concrete
+``done when'' criterion. The online system (BP-06) and its evaluation (BP-07) now run end to end.
 
 \begin{table}[t]
 \centering\small
 \caption{Base-paper sub-tasks and their status.}
 \label{tab:progress}
-\begin{tabular}{@{}lp{6.4cm}p{4.9cm}p{1.9cm}@{}}
+\footnotesize\begin{tabular}{@{}lp{7.6cm}p{5.6cm}l@{}}
 \toprule
 ID & Work & Done-when criterion & Status \\
 \midrule
@@ -76,13 +80,15 @@ BP-02 & Public datasets (chat, code, math), three request streams, 24K draft-voc
 BP-03 & Qwen3-0.6B target with auxiliary hidden-state capture; EAGLE-3 draft and trainer step on MPS
   & Draft overfits one batch in 200 steps; time and memory measured & Done \\
 BP-04 & Offline static EAGLE-3 baseline trained on held-in chat data
-  & $\taubar$ clearly $>0$ on held-out chat & Done ($\taubar=0.313$) \\
+  & $\taubar$ clearly $>0$ on held-out chat & Done \\
 BP-05 & Mini speculative-decoding server: draft, verify, accept, KV cache, logging, training samples, weight hot-swap
-  & Greedy output token-identical to \code{generate} on 50 prompts & Done (50/50, 100/100) \\
+  & Greedy output token-identical to \code{generate} on 50 prompts & Done \\
+BP-06 & Online loop: sample pool, trainer, versioned weight publish; sync and async; day-0 and with-draft starts
+  & $\taubar$ rises over 300 day-0 requests & Done \\
+BP-07 & Metrics, latency bench, CSV/summary writer, plots, online losslessness regression test
+  & Plots and tables from the run logs & Done \\
 \midrule
-BP-06 & Online loop: sample pool, trainer, versioned weight sync (sync and async) & $\taubar$ rises over 300 day-0 requests & Next \\
-BP-07 & Metrics: rolling $\taubar$, $\alpha_i$, speed-up, staleness, plots & Plots from logs; lossless regression test & Planned \\
-BP-08 & Experiments E1--E4 (Section~\ref{sec:baselines}) & Results table and figures & Planned \\
+BP-08 & Experiments E1--E4 (Section~\ref{sec:baselines}) & Results table and figures & Next \\
 BP-09 & Optional CUDA scale check (Qwen3-1.7B/4B) & Same code runs on CUDA & Optional \\
 \bottomrule
 \end{tabular}
@@ -92,75 +98,84 @@ BP-09 & Optional CUDA scale check (Qwen3-1.7B/4B) & Same code runs on CUDA & Opt
 1000 conversations each from ShareGPT (chat), CodeAlpaca-20k (code) and GSM8K (math), filtered to start with
 a user turn and to fit in 1024 tokens. From these pools we emit three request streams: \emph{mixed} (3000
 requests, shuffled), \emph{ordered} (3000, grouped by domain) and \emph{domain-shift} (1200: 600 chat, then
-300 code, then 300 math). The draft predicts only a reduced 24K-token vocabulary (out of Qwen3's 152K), built
-from assistant-token frequencies on the mixed stream with Aurora's \code{generate\_vocab\_mapping}.
+300 code, then 300 math). The draft predicts a reduced 24K-token vocabulary (out of Qwen3's 152K), built from
+assistant-token frequencies on the mixed stream with Aurora's \code{generate\_vocab\_mapping}.
 
 \paragraph{Models (BP-03).} The target is Qwen3-0.6B (596M parameters), with auxiliary hidden states captured
-from layers 1, 13 and 24 via forward hooks. The EAGLE-3 draft is a single Llama decoder layer (hidden size 1024)
-fed by a linear fusion of the three auxiliary states (3072$\to$1024) and the token embedding. It has 42.4M
-trainable parameters (24.6M of them in its own 24K-row output head) and a frozen 155.6M-parameter embedding
-copied from the target. Training uses Aurora's \code{Eagle3Model} with a three-step test-time-training (TTT)
-unroll and loss $\sum_i 0.8^i\,\mathcal{L}_i$, where $\mathcal{L}_i$ is the cross-entropy against the target's
-soft distribution at unroll step $i$.
+from layers 1, 13 and 24. The EAGLE-3 draft is a single Llama decoder layer (hidden size 1024) fed by a linear
+fusion of the three auxiliary states (3072$\to$1024) and the token embedding: 42.4M trainable parameters (24.6M
+in its own 24K-row output head) plus a frozen 155.6M-parameter embedding copied from the target. Training uses
+Aurora's \code{Eagle3Model} with a three-step test-time-training (TTT) unroll and loss $\sum_i 0.8^i\,\mathcal{L}_i$,
+where $\mathcal{L}_i$ is the cross-entropy against the target's soft distribution at unroll step $i$.
 
-\paragraph{Static baseline (BP-04).} No public EAGLE-3 draft exists for Qwen3-0.6B, so we trained one offline.
-We dump the target's hidden states once for the chat pool, holding out the last 100 conversations, and train on
-the other 900: AdamW at learning rate $10^{-4}$, warmup plus cosine schedule, effective batch 8, fp32 weights,
-gradient checkpointing, 8 epochs (896 steps, 19.4 minutes on MPS). This checkpoint is both the \emph{static}
-baseline and the initialisation for Aurora's \emph{with-draft} mode.
+\paragraph{Static baseline (BP-04).} No public EAGLE-3 draft exists for Qwen3-0.6B, so we trained one offline on
+the chat pool, holding out its last 100 conversations: AdamW at $10^{-4}$, warmup plus cosine, effective batch
+8, fp32 weights, gradient checkpointing, 8 epochs (896 steps, 19 minutes on MPS). The checkpoint is published as
+a GitHub release (\code{bp04-static-v1}) so that every member starts from identical weights. It is both the
+\emph{static} baseline and the initialisation for Aurora's \emph{with-draft} mode.
 
 \paragraph{Inference server (BP-05).} This replaces SGLang with an HF-transformers loop at batch size 1. Each
-round the draft proposes $K=3$ guesses; the target scores all of them in one pass using a \code{DynamicCache}
-(cropped on rejection). We implement both greedy acceptance (exact argmax match) and speculative-sampling
-acceptance ($\min(1,p/q)$ with residual resampling). Every request is logged as one JSON line with per-round
-accepted lengths and draft versions. The server also emits Aurora-format training samples (prompt plus
-generated tokens, auxiliary hidden states, loss mask), and new draft weights can be loaded at any time with
-the version tracked. A test suite of 42 tests covers the data, models, baseline and server, including
-losslessness and a statistical test that speculative sampling matches the target's distribution.
+round the draft proposes $K=3$ guesses and the target scores them in one pass using a \code{DynamicCache}
+(cropped on rejection), with greedy (exact argmax match) or speculative-sampling ($\min(1,p/q)$, residual
+resampling) acceptance. It logs per-round accepted lengths and draft versions, emits Aurora-format training
+samples, and can load new draft weights between requests.
+
+\paragraph{Online loop (BP-06).} The server's training samples go into a bounded \emph{sample pool} (128
+samples, kept on the CPU). As in Aurora, serving blocks when the pool is full rather than dropping samples. A
+separate \emph{online trainer} owns its own fp32 copy of the draft and runs the BP-04 recipe on batches from the
+pool at a constant learning rate ($10^{-4}$ day-0, $10^{-5}$ with-draft). Every $N$ steps it \emph{publishes} a
+copy of its weights into a single pending slot, versioned by its step count; the server applies it before its
+next request. In \emph{sync} mode the loop alternates between serving $B$ requests and training $M$ steps. In
+\emph{async} mode a serving thread and a training thread run concurrently; because the MPS backend aborts when
+two threads issue GPU work at once, a FIFO device lock serialises their GPU calls. Every request records the
+trainer's version, so per-round staleness $\Delta$ is exact.
+
+\paragraph{Evaluation tooling (BP-07).} All metrics are recomputed from a run's request log and training log:
+rolling $\taubar$, per-position acceptance $\alpha_i$, acceptance rate, tokens/s against target-only decoding,
+the estimated speed-up $(1+\taubar)/(1+Kc)$, staleness and the loss curve. A latency bench measures $c$, the
+cost of one draft step relative to one target step. Output is CSV, JSON and plots. The repository has 68 tests,
+including losslessness under live weight swaps in sync and async modes.
 
 \section{Notional Architecture}
 
-Figure~\ref{fig:arch} shows the system. The solid components are implemented. The dashed components (sample
-pool, online trainer, weight publication) form the BP-06 online loop, the next deliverable. The GRPO extension
-changes only the loss inside the trainer and adds tree drafting to produce groups of rollouts.
+Figure~\ref{fig:arch} shows the system as built. The GRPO extension changes only the trainer's loss and adds
+tree drafting to the drafter, to produce groups of rollouts; everything else is reused.
 
 \begin{figure}[H]
 \centering
 \begin{tikzpicture}[
   font=\small,
-  box/.style={draw, rounded corners=2pt, align=center, minimum height=0.95cm, inner sep=4pt, fill=white},
-  done/.style={box, fill=blue!6},
-  todo/.style={box, dashed, fill=orange!8},
+  box/.style={draw, rounded corners=2pt, align=center, minimum height=0.95cm, inner sep=4pt, fill=blue!6},
   arr/.style={-{Stealth[length=2mm]}, thick},
-  darr/.style={arr, dashed},
   lab/.style={font=\scriptsize, align=center, fill=white, inner sep=1pt}
 ]
-\node[done] (stream) {Request stream\\{\scriptsize mixed / ordered / shift}};
-\node[done, right=0.8cm of stream] (draft) {Drafter (EAGLE-3)\\{\scriptsize propose $K{=}3$, version $v$}};
-\node[done, right=0.8cm of draft] (target) {Target Qwen3-0.6B\\{\scriptsize verify $K{+}1$ in one pass}};
-\node[done, right=0.8cm of target] (out) {Output tokens\\{\scriptsize identical to target}};
-\node[todo, below=1.3cm of draft] (trainer) {Online trainer\\{\scriptsize forward-KL $\to$ GRPO}};
-\node[todo, below=1.3cm of target] (pool) {Sample pool\\{\scriptsize bounded, 128 samples}};
-\node[done, below=1.3cm of out] (log) {JSONL log\\{\scriptsize accepted, versions, tok/s}};
-\node[todo, left=0.8cm of trainer] (metrics) {Metrics + plots\\{\scriptsize $\taubar$, $\alpha_i$, staleness}};
+\node[box] (stream) {Request stream\\{\scriptsize mixed / ordered / shift}};
+\node[box, right=0.8cm of stream] (draft) {Drafter (EAGLE-3)\\{\scriptsize propose $K{=}3$, version $v$}};
+\node[box, right=0.8cm of draft] (target) {Target Qwen3-0.6B\\{\scriptsize verify $K{+}1$ in one pass}};
+\node[box, right=0.8cm of target] (out) {Output tokens\\{\scriptsize identical to target}};
+\node[box, below=1.3cm of draft] (trainer) {Online trainer\\{\scriptsize forward-KL $\to$ GRPO}};
+\node[box, below=1.3cm of target] (pool) {Sample pool\\{\scriptsize bounded, 128 samples}};
+\node[box, below=1.3cm of out] (log) {JSONL + train log\\{\scriptsize accepted, versions, loss}};
+\node[box, left=0.8cm of trainer] (metrics) {Metrics + plots\\{\scriptsize $\taubar$, $\alpha_i$, staleness}};
 
 \draw[arr] (stream) -- (draft);
 \draw[arr] (draft) -- node[lab, above=2pt] {guesses} (target);
 \draw[arr] (target) -- (out);
-\draw[darr] (target.south) -- node[lab, right=2pt] {training\\sample} (pool.north);
-\draw[darr] (pool) -- (trainer);
-\draw[darr] (trainer.north) -- node[lab, left=2pt] {weights $v{+}1$\\every $N$ req.} (draft.south);
+\draw[arr] (target.south) -- node[lab, right=2pt] {training\\sample} (pool.north);
+\draw[arr] (pool) -- (trainer);
+\draw[arr] (trainer.north) -- node[lab, left=2pt] {weights $v{+}1$\\every $N$ steps} (draft.south);
 \draw[arr] (out.south) -- node[lab, right=2pt] {per-request\\record} (log.north);
-\draw[darr] (log.south) -- ++(0,-0.45) -| (metrics.south);
+\draw[arr] (log.east) -- ++(0.3,0) |- ([yshift=-0.85cm]metrics.south) -- (metrics.south);
 
 \begin{scope}[on background layer]
   \node[draw=gray, rounded corners, fit=(stream)(draft)(target)(out), inner sep=5pt,
         label={[font=\scriptsize\itshape, gray]above:inference server (BP-05)}] {};
+  \node[draw=gray, dashed, rounded corners, fit=(trainer)(pool), inner sep=5pt,
+        label={[font=\scriptsize\itshape, gray, yshift=-2pt]below:online loop (BP-06)}] {};
 \end{scope}
 \end{tikzpicture}
-\caption{System architecture. Solid blue boxes are implemented (BP-02 to BP-05); dashed orange boxes are the
-online loop and metrics (BP-06, BP-07). The trainer's objective is forward KL in the reproduction and
-off-policy GRPO in the extension.}
+\caption{System architecture (BP-02 to BP-07, all implemented). The trainer's objective is forward KL in the
+reproduction and off-policy GRPO in the extension.}
 \label{fig:arch}
 \end{figure}
 
@@ -177,13 +192,13 @@ Table~\ref{tab:mapping} maps each Aurora component to its laptop-scale replaceme
 Aurora (paper) & This reproduction \\
 \midrule
 SGLang server with EAGLE-3 patch & HF \texttt{transformers} draft--verify loop on MPS \\
-Mooncake transfer store & In-process bounded queue (same pool-size semantics) \\
-Ray controller, placement groups & Plain Python loop (sync mode) or two threads (async mode) \\
+Mooncake transfer store & In-process bounded sample pool with the same backpressure \\
+Ray controller, placement groups & Single loop (sync) or two threads with a device lock (async) \\
 FSDP2 \texttt{Eagle3Trainer} & Single-device trainer around Aurora's \texttt{Eagle3Model} \\
 FlexAttention / FlashAttention, \texttt{torch.compile} & PyTorch SDPA, eager mode \\
-Shared-filesystem weight sync & In-memory or on-disk \texttt{state\_dict} with a version counter \\
+Shared-filesystem weight sync & In-memory versioned publish slot \\
 Qwen3-8B / 4B target, 32K draft vocab & Qwen3-0.6B target, 24K draft vocab \\
-$K=5$, TTT length 5, $\sim$20K requests per run & $K=3$, TTT length 3, 1--3K requests per run \\
+$K=5$, TTT length 5, $\sim$20K requests per run & $K=3$, TTT length 3, 300--3K requests per run \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -191,18 +206,16 @@ $K=5$, TTT length 5, $\sim$20K requests per run & $K=3$, TTT length 3, 1--3K req
 \section{Frameworks and Libraries}
 
 \begin{itemize}
-  \item \textbf{PyTorch 2.14} with the MPS backend (Apple GPU), with \code{PYTORCH\_ENABLE\_MPS\_FALLBACK=1}
-  and \code{TORCHDYNAMO\_DISABLE=1}. Tests also run with the fallback disabled to prove that no operation
-  silently falls back to the CPU.
-  \item \textbf{Hugging Face \code{transformers} 4.57.1} (target model, \code{DynamicCache}, chat templates),
+  \item \textbf{PyTorch 2.14} on the MPS backend (Apple GPU), eager mode with SDPA attention; tests also run with
+  CPU fallback disabled. Python threads for the async loop.
+  \item \textbf{Hugging Face} \code{transformers} 4.57.1 (target model, \code{DynamicCache}, chat templates),
   \code{datasets} and \code{huggingface\_hub} (ShareGPT, CodeAlpaca, GSM8K), \code{accelerate}, \code{safetensors}.
-  \item \textbf{Aurora}~\cite{aurora} (\code{aurora-main/}, installed with \code{--no-deps}): EAGLE-3 draft
-  model, \code{Eagle3Model} TTT wrapper, target-feature hooks, vocab mapping, conversation parser.
-  \item \textbf{Tooling:} \code{uv} with Python 3.12, \code{pytest}, \code{matplotlib} and CSV for metrics
-  (W\&B offline is optional), Docker CPU image for non-Apple machines, Kaggle T4 notebooks for an independent
-  GPU check, GitHub issues and pull requests for the BP-01 to BP-09 workflow.
-  \item \textbf{Optional scale-up (BP-09):} Aurora's original CUDA stack (SGLang, FSDP2, FlexAttention) on a
-  Colab or cluster GPU with Qwen3-1.7B/4B, to check that the scaled-down results carry over.
+  \item \textbf{Aurora}~\cite{aurora} (installed without its CUDA-only dependencies): EAGLE-3 draft model,
+  \code{Eagle3Model} TTT wrapper, target-feature hooks, vocab mapping, conversation parser.
+  \item \textbf{Tooling:} \code{uv} with Python 3.12, \code{pytest}, \code{matplotlib}, a Docker CPU image, Kaggle
+  T4 notebooks for an independent GPU check, GitHub releases for checkpoints and one issue / PR per sub-task.
+  \item \textbf{Optional (BP-09):} Aurora's CUDA stack (SGLang, FSDP2, FlexAttention) on a cloud GPU with
+  Qwen3-1.7B/4B.
 \end{itemize}
 
 \section{Baselines and State of the Art}
@@ -218,73 +231,46 @@ hot-swap, and is the state of the art we reproduce. GRPO~\cite{grpo} is the crit
 extension adapts.
 
 \paragraph{Systems we compare.} All are evaluated on the same streams, hardware and decoding settings:
-\begin{enumerate}
-  \item \textbf{Target only:} plain autoregressive decoding, the speed-up reference.
-  \item \textbf{Static EAGLE-3:} the BP-04 draft, frozen. This is the ``train offline, then deploy''
-  pipeline Aurora argues against.
-  \item \textbf{Aurora, day-0:} online forward-KL training from a random draft.
-  \item \textbf{Aurora, with-draft:} online forward-KL training starting from the static draft.
-  \item \textbf{Ours:} off-policy GRPO with a forward-KL anchor, plus the ablations from the proposal:
-  synchronous on-policy GRPO ($\Delta=0$), group size $G$, KL weight $\beta$, clipping and truncation
-  thresholds, and reward shaping.
-\end{enumerate}
+(1)~\textbf{target only}, the speed-up reference; (2)~\textbf{static EAGLE-3}, the frozen BP-04 draft, i.e.\ the
+``train offline, then deploy'' pipeline Aurora argues against; (3)~\textbf{Aurora day-0}, online forward-KL
+training from a random draft; (4)~\textbf{Aurora with-draft}, online forward-KL training from the static draft;
+(5)~\textbf{ours}, off-policy GRPO with a forward-KL anchor, with the ablations from the proposal (synchronous
+on-policy GRPO, $\Delta=0$; group size $G$; KL weight $\beta$; clipping and truncation thresholds; reward shaping).
 
-\paragraph{Planned experiments (BP-08).} \textbf{E1}: is day-0 online training better than target-only on the
-mixed stream? \textbf{E2}: static draft vs.\ with-draft online training under the chat$\to$code$\to$math
-shift (Aurora's main claim is faster recovery after a shift). \textbf{E3}: E2 on the ordered stream.
-\textbf{E4}: sensitivity to the sync interval $N\in\{5,20,50\}$, the learning rate, and sync vs.\ async
-training. The headline metric is $\taubar$, which does not depend on hardware. We also report per-position
-acceptance $\alpha_i$, measured tokens/s, the estimated speed-up $(1+\taubar)/(1+Kc)$ (where $c$ is the
-measured draft-to-target cost ratio), the staleness distribution and the area under the rolling-$\taubar$
-curve after each shift.
+\paragraph{Planned experiments (BP-08).} \textbf{E1}: day-0 online training against target-only on the mixed
+stream (partly done: Section~\ref{sec:results}). \textbf{E2}: static draft vs.\ with-draft online training under the
+chat$\to$code$\to$math shift; Aurora's main claim is faster recovery after a shift, which we measure as the area
+under the rolling-$\taubar$ curve after each shift. \textbf{E3}: E2 on the ordered stream. \textbf{E4}:
+sensitivity to the sync interval $N\in\{5,20,50\}$, the learning rate, and sync vs.\ async training. The
+headline metric is $\taubar$, which does not depend on hardware; we also report $\alpha_i$, measured and
+estimated speed-up, and the staleness distribution.
 
 \section{Evaluation Results (Prototype)}
+\label{sec:results}
 
-All numbers below are from the M5 Pro (MPS) with greedy decoding, $K=3$, fp32, and up to 128 new tokens.
+All runs use greedy decoding, $K=3$, fp32 target and draft, and up to 128 new tokens. BP-03 to BP-05 ran on an
+M5 Pro (24\,GB); the BP-06 run ran on a MacBook Air (16\,GB). Tokens/s is therefore only compared within a run.
 
-\paragraph{Correctness.} Speculative output is token-identical to target-only \code{generate} on 50/50
-stream prompts (18 chat, 17 code, 15 math) and on 100/100 held-out chat requests. This holds both with the
-KV cache and in the cache-free reference path.
+\paragraph{Correctness.} Speculative output is token-identical to target-only decoding on every request checked:
+50/50 stream prompts and 100/100 held-out chat requests with a fixed draft (BP-05), and \textbf{300/300} requests
+of the online run while the draft's weights were replaced 30 times (BP-06).
 
-\paragraph{Draft trainability (BP-03).} On one fixed batch (4 sequences of 95 tokens) the draft overfits in
-200 steps: loss falls from 9.87 to 0.851 against a target-entropy floor of 0.849, the remaining KL is 0.002,
-and accuracy is 0.99 / 0.99 / 0.98 at the three TTT positions. An AdamW step takes 98\,ms and peak memory is
-3.3\,GB. On real 4$\times$1025-token batches with the 24K vocab, peak memory is 9.9\,GB in fp32, and 7.2\,GB
-with bf16 and gradient checkpointing.
+\paragraph{Draft trainability and static baseline (BP-03, BP-04).} On one fixed batch the draft overfits in 200
+steps (loss 9.87$\to$0.851 against a target-entropy floor of 0.849; accuracy 0.99 / 0.99 / 0.98). The static
+draft's held-out accuracy (draft argmax equals target argmax, teacher-forced) rises from 0.183 after epoch 1 to
+0.245 after epoch 2 and \textbf{0.310 / 0.270 / 0.248} after epoch 8, plateauing after epoch 6. A 2-epoch run
+gives the same numbers on a Kaggle T4 and on MPS, and the released T4 8-epoch checkpoint matches the MPS one
+($\taubar$ 0.315 vs.\ 0.313).
 
-\paragraph{Static baseline (BP-04).} Table~\ref{tab:bp04} shows held-out accuracy (draft argmax equals target
-argmax, teacher-forced) during the 8-epoch run. The 2-epoch run gives the same numbers on a Kaggle T4 and on
-MPS (0.192 at position 1), which checks the two platforms against each other. Accuracy plateaus after epoch
-6, as the cosine schedule decays the learning rate, and train accuracy is only $\sim$2 points above
-held-out, so the draft is not overfitting.
+\paragraph{Static draft in the server (BP-05).} Table~\ref{tab:serve} gives end-to-end results on the M5 Pro.
+The upper rows are sanity bounds: an untrained draft accepts nothing, while a draft overfitted to the exact
+answers reaches $\taubar=2.6$ and twice the target-only speed, so the server can deliver a real speed-up when
+the draft guesses well. On held-out chat the trained static draft reaches $\taubar=0.313$.
 
-\begin{table}[H]
+\begin{table}[t]
 \centering\small
-\caption{BP-04 static draft on the 100 held-out chat conversations (random initialisation: loss $\ln 24000=10.09$).}
-\label{tab:bp04}
-\begin{tabular}{@{}rrcc@{}}
-\toprule
-Epoch & Step & Held-out loss (pos.\ 1 / 2 / 3) & Held-out accuracy (pos.\ 1 / 2 / 3) \\
-\midrule
-1 & 112 & 6.46 / 6.72 / 6.85 & 0.183 / 0.138 / 0.119 \\
-2 & 224 & 5.75 / 5.96 / 6.11 & 0.245 / 0.209 / 0.191 \\
-4 & 448 & 5.19 / 5.43 / 5.58 & 0.292 / 0.254 / 0.232 \\
-6 & 672 & 5.00 / 5.25 / 5.41 & 0.308 / 0.268 / 0.245 \\
-\textbf{8} & \textbf{896} & \textbf{4.98 / 5.22 / 5.38} & \textbf{0.310 / 0.270 / 0.248} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\paragraph{Live serving (BP-05).} Table~\ref{tab:serve} gives end-to-end results. The upper rows are sanity
-bounds: an untrained draft accepts nothing, while a draft overfitted to the exact answers reaches $\taubar=2.6$
-and $2.0\times$ the target-only speed. This shows that the server can deliver a real speed-up when the draft
-guesses well. On held-out chat, the trained static draft reaches $\taubar=0.313$, so the done-when criterion
-for BP-04 is met.
-
-\begin{table}[H]
-\centering\small
-\caption{Speculative serving on MPS. $\alpha_i$ is the share of rounds whose first $i$ guesses were all
-accepted, so $\taubar=\alpha_1+\alpha_2+\alpha_3$.}
+\caption{Speculative serving with a fixed draft (M5 Pro). $\alpha_i$ is the share of rounds whose first $i$
+guesses were all accepted, so $\taubar=\alpha_1+\alpha_2+\alpha_3$.}
 \label{tab:serve}
 \footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}lccccc@{}}
@@ -295,76 +281,129 @@ Untrained, KV cache & 50 stream & 0.00 & -- & 33.4 vs.\ 59.9 & 50/50 \\
 Overfit (upper bound) & 50 stream & 2.60 & -- & 122.3 vs.\ 59.9 ($2.0\times$) & 50/50 \\
 \midrule
 Static, 2 epochs & 100 held-out & 0.181 & 0.164 / 0.016 / 0.001 & 29.1 vs.\ 54.9 ($0.53\times$) & 100/100 \\
-\textbf{Static, 8 epochs (baseline)} & 100 held-out & \textbf{0.313} & \textbf{0.242 / 0.058 / 0.013} & \textbf{32.1 vs.\ 54.8 ($0.59\times$)} & \textbf{100/100} \\
+\textbf{Static, 8 epochs (baseline)} & 100 held-out & \textbf{0.313} & \textbf{0.242 / 0.058 / 0.013} & \textbf{32.1 vs.\ 54.8 (0.59$\times$)} & \textbf{100/100} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\paragraph{What the numbers say.} (i) Acceptance collapses after the first guess ($\alpha_2=0.06$). A chain
-stops at the first miss, and guesses 2--3 are built on the draft's own hidden states. This is why
-teacher-forced accuracy (0.31 / 0.27 / 0.25) overstates live acceptance. (ii) Serving is still
-\emph{slower} than the target alone: one round costs $\sim$41\,ms, about 2.3 target-only steps of 18\,ms, but
-yields only 1.32 tokens, so breaking even needs $\taubar\approx1.3$. (iii) Every gain must therefore come from
-higher acceptance, which is what online training (BP-06) and the GRPO objective target, together with a
-cheaper round (a draft KV cache). Positions 2--3 are exactly where an acceptance-based reward differs most
-from forward KL, which weights all positions equally.
+\paragraph{Online day-0 run (BP-06, BP-07).} We served the first 300 requests of the mixed stream (104 chat,
+100 code, 96 math) starting from a \emph{random} draft, in sync mode: one optimizer step per 2 requests (each
+sample used once), learning rate $10^{-4}$, a publish every 5 steps. That is 150 training steps and 30 weight
+swaps; the run took 55 minutes, 2.3 of which were training, with a peak of 7.5\,GB. Figure~\ref{fig:rolling}
+and Table~\ref{tab:online} show the result: rolling $\taubar$ rises from \textbf{0.039} over the first 50
+requests to \textbf{0.246} over the last 50, and is still rising at request 300. That meets BP-06's done-when.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.72\linewidth]{figures/rolling_tau.png}
+\caption{Day-0 online run: per-request $\taubar$ (dots) and rolling $\taubar$ over the last 50 requests, with
+each request's domain underneath.}
+\label{fig:rolling}
+\end{figure}
+
+\begin{table}[t]
+\centering\small
+\caption{Day-0 online run, 300 mixed requests (MacBook Air). Measured speed is relative to target-only decoding
+of the same requests; the estimate uses the bench's $c=0.099$.}
+\label{tab:online}
+\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+ & Requests & $\taubar$ & $\alpha_1/\alpha_2/\alpha_3$ & tok/s (vs.\ target) & Est.\ speed-up & $\Delta$ mean / max & Lossless \\
+\midrule
+chat & 104 & 0.090 & 0.087 / 0.003 / 0.000 & 13.6 (0.45$\times$) & 0.84$\times$ & 2.08 / 4 & 104/104 \\
+code & 100 & 0.144 & 0.137 / 0.006 / 0.000 & 19.1 (0.58$\times$) & 0.88$\times$ & 1.92 / 4 & 100/100 \\
+math & 96 & 0.227 & 0.204 / 0.019 / 0.003 & 19.7 (0.61$\times$) & 0.95$\times$ & 1.89 / 4 & 96/96 \\
+\midrule
+all & 300 & 0.152 & 0.141 / 0.009 / 0.001 & 16.9 (0.53$\times$) & 0.89$\times$ & 1.96 / 4 & 300/300 \\
+first 50 & 50 & 0.039 & 0.038 / 0.000 / 0.000 & -- & -- & -- & -- \\
+\textbf{last 50} & 50 & \textbf{0.246} & \textbf{0.215 / 0.028 / 0.003} & -- & 0.96$\times$ & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A with-draft smoke run (20 mixed requests, starting from the released static draft, learning rate $10^{-5}$)
+starts at $\taubar\approx0.26$ immediately, which the day-0 draft only reaches after about 300 requests. A
+full with-draft run is part of E2.
+
+\paragraph{What the numbers say.}
+\begin{enumerate}
+  \item \textbf{Online learning works from scratch.} With only 150 steps on about 34K completion tokens, the
+  day-0 draft reaches 80\% of the static draft's $\taubar$, which needed 896 offline steps. It learns fastest on
+  math, whose text is the most predictable (math $0.115\to0.318$, code $0.074\to0.226$, chat $0.050\to0.126$,
+  first vs.\ last third of each domain's requests).
+  \item \textbf{Acceptance is almost all at the first guess.} $\alpha_2$ and $\alpha_3$ stay small for both
+  drafts. Guesses 2--3 are built on the draft's own hidden states, and a chain stops at the first miss, so
+  errors compound. Teacher-forced accuracy (0.31 / 0.27 / 0.25) therefore overstates live acceptance. Positions
+  2--3 are exactly where an acceptance-based reward differs most from forward KL, which weights all positions
+  equally.
+  \item \textbf{Staleness is small and harmless.} The served draft lags the trainer by 0--4 steps (mean 1.96),
+  and losslessness held through every swap.
+  \item \textbf{Still slower than the target alone.} A round costs about 2.2--2.3 target-only steps (68\,ms on
+  the Air, 41\,ms on the M5 Pro) but yields only $1+\taubar$ tokens, so break-even needs $\taubar\approx1.2$--$1.3$.
+  The estimate (0.89$\times$) is more optimistic than the measurement (0.53$\times$) because it leaves out the
+  $(K{+}1)$-token verify pass, the draft re-reading a growing context (it has no KV cache yet) and per-round
+  overhead.
+\end{enumerate}
+
+\paragraph{Relation to published results.} Papers usually report acceptance length as tokens per target pass,
+which is $1+\taubar$ in our notation. Published EAGLE-2/3 drafts with tree drafting on 8B--70B targets report
+roughly 4--6+ tokens per pass and 3--6$\times$ speed-ups; chain-style methods such as classic speculative
+decoding and Medusa report about 2--3$\times$~\cite{leviathan,medusa,eagle2,eagle3}. We are at 1.25--1.31
+tokens per pass and below 1$\times$. The gap is expected: our drafts have seen thousands rather than hundreds of
+thousands of training conversations, we draft one chain of $K=3$ instead of a tree, a 0.6B target makes the
+draft's relative cost large ($c\approx0.1$), and MPS with batch size 1 lacks the kernels and batching of
+production servers. We therefore compare systems \emph{against each other} on the same setup, with $\taubar$ as
+the headline metric, rather than against published absolute speed-ups.
 
 \section{Issues Faced}
 
 \paragraph{Solved.}
 \begin{itemize}
-  \item \textbf{Compute and CUDA-only stack.} Full Aurora is out of reach, so we scaled down to Qwen3-0.6B on
-  MPS and replaced SGLang, Mooncake, Ray and FSDP2 (Table~\ref{tab:mapping}), while reusing Aurora's
-  algorithmic code unchanged.
-  \item \textbf{No public draft and private data.} We trained our own EAGLE-3 draft (BP-04) on public
-  datasets. In ShareGPT, 939 sampled threads started mid-conversation and 613 exceeded 1024 tokens; filters
-  remove both.
-  \item \textbf{Draft-vocab coverage.} A 16K draft vocab covered only 97.6\% of assistant tokens, and tokens
-  outside it can never be drafted. 24K raises coverage to 0.993 / 0.995 / 0.998 (chat / code / math) for 8.2M
-  more parameters and $\sim$1\,GB more peak memory, recovered by gradient checkpointing.
-  \item \textbf{Memory on real sequences.} 4$\times$1K-token batches needed 9.9\,GB, beyond the 6--8\,GB
-  estimate, because of the draft logits across three TTT steps. We use batch 2 with gradient accumulation
-  and gradient checkpointing (2.4\,GB in training).
-  \item \textbf{bf16 training underperforms.} With pure-bf16 AdamW at learning rate $10^{-4}$, small updates
-  round away (all held-out accuracies 2--3 points lower). Aurora avoids this with fp32 master weights under
-  FSDP, so we train in fp32. A reload bug that silently cast fp32 checkpoints to bf16 was found and fixed.
-  \item \textbf{Exactness in bf16.} Scoring four tokens in one pass rounds slightly differently from four
-  single-token passes, which can flip near-tied argmaxes. Losslessness checks therefore run in fp32, where
-  they pass 150/150.
-  \item \textbf{Under-trained baseline.} The first 2-epoch draft gave $\taubar=0.18$. Eight epochs raised it
-  to 0.31 for 20 minutes of training.
+  \item \textbf{Compute and CUDA-only stack:} scaled down to Qwen3-0.6B on MPS, replacing SGLang, Mooncake, Ray
+  and FSDP2 (Table~\ref{tab:mapping}) while reusing Aurora's algorithmic code unchanged.
+  \item \textbf{No public draft, private data:} trained our own EAGLE-3 draft on public data; ShareGPT filters
+  drop 939 threads that start mid-conversation and 613 longer than 1024 tokens.
+  \item \textbf{Draft-vocab coverage:} 16K covered only 97.6\% of assistant tokens (others can never be drafted);
+  24K covers 0.993 / 0.995 / 0.998 (chat / code / math) for 8.2M more parameters.
+  \item \textbf{Memory:} 4$\times$1K-token batches needed 9.9\,GB (draft logits $\times$ 3 TTT steps); batch 2 with
+  gradient checkpointing trains in 2.4\,GB, and the whole online loop peaks at 7.5\,GB, so it fits a 16\,GB laptop.
+  \item \textbf{Precision:} pure-bf16 AdamW lost 2--3 accuracy points (small updates round away), so we train in
+  fp32 like Aurora's master weights. In bf16, a 4-token verify pass rounds differently from 4 single steps and can
+  flip near-ties, so losslessness checks run in fp32 (450/450 pass).
+  \item \textbf{Threads on MPS:} MPS aborts when two threads use the GPU at once; async mode serialises GPU calls
+  with a FIFO device lock.
+  \item \textbf{Sharing checkpoints:} the 170\,MB static draft is a GitHub release with a SHA-256 checksum.
 \end{itemize}
 
 \paragraph{Open.}
 \begin{itemize}
-  \item \textbf{No wall-clock speed-up yet} ($0.59\times$), as analysed above. Mitigations: online training,
-  a draft-side KV cache, and reporting the estimated speed-up next to the measured one, since MPS overheads
-  differ from a production GPU server.
-  \item \textbf{Train/test overlap in the streams.} The 600 chat requests of the domain-shift stream, and
-  900 of the 1000 chat requests in the mixed stream, were BP-04 training prompts. Before E2/E3 we must either
-  rebuild the chat segments from held-out conversations or report results on the unseen segments only.
-  \item \textbf{Single-device asynchrony.} Serving and training share one GPU, so ``async'' mode on the
-  laptop competes for the same compute. Staleness will be real but smaller than in Aurora's two-server
-  layout; E4 quantifies this.
+  \item \textbf{No wall-clock speed-up yet.} Levers: higher $\taubar$ (more online training, GRPO), a draft KV
+  cache, and tree drafting.
+  \item \textbf{Train/test overlap in the streams.} The 600 chat requests of the domain-shift stream, and 900 of
+  the 1000 chat requests in the mixed stream, were BP-04 training prompts. This does not affect day-0 runs, but
+  before E2/E3 we must rebuild the chat segments from held-out conversations or report on unseen requests only.
+  \item \textbf{Single-device asynchrony.} With the device lock, ``async'' on one GPU interleaves rather than
+  overlaps serving and training. Staleness is real but smaller than in Aurora's two-server layout; E4 will
+  quantify the difference.
+  \item \textbf{Hardware variance.} A fanless laptop slowed $\sim$12\% over an hour (the speed ratio held at
+  0.53--0.54), so we only compare speeds within a run.
   \item \textbf{GRPO prerequisites.} Groups of rollouts need tree drafting (top-$k>1$), which is not yet
-  implemented (chain drafting only), and the reduced $K=3$ shortens the reward range compared with the paper's
-  $K=5$.
-  \item \textbf{Sharing artifacts.} Checkpoints (170\,MB) are not in git. We will publish the static draft
-  as a GitHub release so all members start BP-06 from the same weights.
+  implemented, and $K=3$ gives a shorter reward range than the paper's $K=5$.
 \end{itemize}
 
 \section{Next Steps}
 
 \begin{enumerate}
-  \item \textbf{BP-06, online loop:} a bounded sample pool fed by the server, the BP-03 trainer, and weight
-  publication every $N$ requests, in sync and async modes, from both day-0 and with-draft starts. Done when
-  $\taubar$ rises over a 300-request day-0 run.
-  \item \textbf{BP-07, metrics:} rolling $\taubar$, $\alpha_i$, speed-up, staleness histograms and loss curves
-  from the JSONL logs, plus a losslessness regression test.
-  \item \textbf{BP-08, experiments E1--E4}, after fixing the stream overlap.
-  \item \textbf{GRPO extension:} tree drafting for groups, reward $R(a)=L(a)-\lambda\kappa(K-L(a))$ computed
-  from the logged accepted lengths, the off-policy objective with truncated importance weights and the
-  forward-KL anchor, and comparison against systems 2--4 above.
+  \item \textbf{With-draft run:} 300 mixed requests from the released static draft, with the same settings as
+  the day-0 run, for a direct comparison.
+  \item \textbf{BP-08, experiments E1--E4}, after removing the stream overlap: E2/E3 on the domain-shift and
+  ordered streams (static vs.\ day-0 vs.\ with-draft), and E4 sweeps over $N$, learning rate and sync vs.\ async.
+  \item \textbf{GRPO extension:} tree drafting for groups; reward $R(a)=L(a)-\lambda\kappa(K-L(a))$ from the
+  logged accepted lengths; the off-policy objective with truncated importance weights and the forward-KL
+  anchor, using the logged staleness; and comparison against systems 2--4 above.
+  \item \textbf{BP-09 (optional):} the same code on a CUDA GPU with a larger target, to check that the trends
+  carry over.
 \end{enumerate}
 
 \begin{thebibliography}{9}\small
