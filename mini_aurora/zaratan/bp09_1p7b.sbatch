@@ -12,7 +12,7 @@
 #   full  (~1-1.5 h, ~50-75 SU):          sbatch -t 2:00:00 --export=ALL,LIMIT=,EPOCHS=8 mini_aurora/zaratan/bp09_1p7b.sbatch
 # Walltime is the SU cap: 1 A100 hour = 48 SU, charged for the time used.
 
-SCRATCH="${SCRATCH:-$HOME/scratch.msai635/rl-spec-decoding}"
+SCRATCH="${SCRATCH:-$HOME/scratch.msml612/rl-spec-decoding}"
 source "${VENV:-$SCRATCH/venv}/bin/activate"
 cd "${REPO:-$SCRATCH/repo}"
 

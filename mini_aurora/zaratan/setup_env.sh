@@ -4,7 +4,7 @@
 # Afterwards: sbatch mini_aurora/zaratan/bp09_1p7b.sbatch
 set -eo pipefail   # no -u: /etc/profile and the module system reference unset variables
 cd "$(dirname "$0")/../.."
-SCRATCH="${SCRATCH:-$HOME/scratch.msai635/rl-spec-decoding}"
+SCRATCH="${SCRATCH:-$HOME/scratch.msml612/rl-spec-decoding}"
 VENV="${VENV:-$SCRATCH/venv}"
 
 # Aurora needs Python >= 3.12 and Zaratan's newest python module is 3.10, so uv fetches a standalone CPython 3.12
