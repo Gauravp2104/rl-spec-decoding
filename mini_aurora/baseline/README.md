@@ -100,8 +100,8 @@ published as a GitHub release, so all runs start from the same bytes:
 
 ```bash
 gh release download bp04-static-v1 -R Gauravp2104/rl-spec-decoding -D outputs/baseline/checkpoints_8ep
-shasum -a 256 outputs/baseline/checkpoints_8ep/bp04_static_draft_step000896.pt   # 89f66983d6d0cdc28e81ee9a34c29c1b5254c0e1b66a678a97da5c11b67b7e4d
-python -m mini_aurora.server.serve -n 100 --heldout --check --draft outputs/baseline/checkpoints_8ep/bp04_static_draft_step000896.pt
+shasum -a 256 outputs/baseline/checkpoints_8ep/draft_step000896.pt   # 89f66983d6d0cdc28e81ee9a34c29c1b5254c0e1b66a678a97da5c11b67b7e4d
+python -m mini_aurora.server.serve -n 100 --heldout --check --draft outputs/baseline/checkpoints_8ep   # latest.txt is in the release
 ```
 
 It was trained on a Kaggle T4 with the defaults above (`mini_aurora/baseline/kaggle/push.py`): held-out acc

@@ -87,6 +87,7 @@ python -m mini_aurora.server.serve -n 20 --sampling --temperature 0.7 --seed 0 -
 ```
 
 Without `--draft`, `serve` uses a day-0 draft: output is still exact, but τ̄ ≈ 0 and it runs at about half the
-target-only speed. BP-04's static baseline plugs in with `--draft outputs/baseline/checkpoints_8ep` (train it with
-`python -m mini_aurora.baseline.train --epochs 8 --out outputs/baseline/checkpoints_8ep`); `--heldout` serves only
+target-only speed. BP-04's static baseline plugs in with `--draft outputs/baseline/checkpoints_8ep` (download the frozen one with
+`gh release download bp04-static-v1 -R Gauravp2104/rl-spec-decoding -D outputs/baseline/checkpoints_8ep`, or train it
+with `python -m mini_aurora.baseline.train --epochs 8 --out outputs/baseline/checkpoints_8ep`); `--heldout` serves only
 the 100 chat conversations BP-04 never trained on (its done-when: τ̄ clearly > 0 there, met at 0.313).
