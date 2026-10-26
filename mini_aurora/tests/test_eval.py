@@ -1,4 +1,5 @@
-"""BP-07: metrics, the metrics.csv / summary.json writer and the plots on a small hand-written online log.
+"""BP-07: metrics, the metrics.csv / summary.json writer and the plots on a small hand-written online log, and a
+losslessness regression test for the online loop.
 
 The hand-written log has 4 requests (K = 3, chat then code). Over all 8 rounds the accepted lengths are
 [0, 1 | 3, 3 | 2 | 0, 0, 1], so τ̄ = 10 / 8, α = (5/8, 3/8, 2/8), acceptance rate = 10 / 24, and staleness per round
@@ -7,8 +8,11 @@ The hand-written log has 4 requests (K = 3, chat then code). Over all 8 rounds t
 
 import csv
 import json
+from pathlib import Path
 
 import pytest
+import torch
+from huggingface_hub import try_to_load_from_cache
 
 from mini_aurora.eval.metrics import (
     acceptance_rate,
@@ -27,8 +31,13 @@ from mini_aurora.eval.metrics import (
     tau,
     tokens_per_s,
 )
-from mini_aurora.server.log import acceptance_by_position
-from mini_aurora.server.serve import summarize
+from mini_aurora.models.target import DEFAULT_TARGET, load_target, load_tokenizer
+from mini_aurora.models.vocab import load_vocab_mapping
+from mini_aurora.online.loop import OnlineLoop
+from mini_aurora.online.pool import SamplePool
+from mini_aurora.online.start import start
+from mini_aurora.server.log import RequestLog, acceptance_by_position
+from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, summarize
 
 RECORDS = [
     {"index": 0, "request_id": "a", "domain": "chat", "prompt_tokens": 10, "new_tokens": 5, "k": 3,
@@ -145,3 +154,32 @@ def test_plot_run_writes_every_figure(tmp_path, monkeypatch):
     assert [p.name for p in paths] == ["rolling_tau.png", "alpha.png", "staleness.png", "loss.png", "tokens_per_s.png"]
     assert all(p.stat().st_size > 1000 for p in paths)
     assert (tmp_path / "eval" / "metrics.csv").exists() and (tmp_path / "eval" / "summary.json").exists()
+
+
+needs_models = pytest.mark.skipif(
+    not isinstance(try_to_load_from_cache(DEFAULT_TARGET, "config.json"), str) or not Path(DEFAULT_STREAM).exists(),
+    reason=f"{DEFAULT_TARGET} not in the HF cache or BP-02 stream missing",
+)
+
+
+@needs_models
+@pytest.mark.parametrize("mode", ["sync", "async"])
+def test_online_run_is_lossless(mode, tmp_path):
+    """Regression: every output of a short fp32 greedy online run equals ``reference_generate``, across hot-swaps."""
+    torch.manual_seed(0)
+    target, tokenizer = load_target(dtype=torch.float32), load_tokenizer()
+    drafter, trainer = start(target, "day0", load_vocab_mapping(), lr=1e-3, batch_size=2, accumulation=1,
+                             log_path=tmp_path / "train_log.csv")
+    with RequestLog(tmp_path / "requests.jsonl") as log:
+        loop = OnlineLoop(target, tokenizer, drafter, trainer, SamplePool(8, 2), sync_every=1, max_new_tokens=16,
+                          check=True, log=log)
+        rows = load_requests(DEFAULT_STREAM, 8)
+        if mode == "sync":
+            loop.run_sync(rows, serve_batch=2)
+        else:
+            loop.run_async(rows)
+    trainer.close()
+    summary = evaluate_run(tmp_path, window=4)
+    assert summary["all"]["matches"] == "8/8"
+    assert len({v for r in load_run(tmp_path)["records"] for v in r["versions"]}) >= 2  # weights were swapped
+
