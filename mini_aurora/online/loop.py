@@ -1,4 +1,12 @@
-"""Online loop (BP-06 steps 5-6): serve stream requests, push their training samples into the pool, train, publish.
+"""Online loop (BP-06 steps 5-7): serve stream requests, push their training samples into the pool, train, publish.
+
+    python -m mini_aurora.online.loop --mode sync --start day0 -n 300 --sync-every 1 --out outputs/online/day0_sync
+    python -m mini_aurora.online.loop --mode async --start day0 -n 20 --max-new-tokens 32 --out outputs/online/dev
+    python -m mini_aurora.online.loop --mode sync --start draft --draft outputs/baseline/checkpoints_8ep -n 300 \
+        --out outputs/online/draft_sync
+
+Writes ``<out>/requests.jsonl`` (BP-05 ``RequestLog`` lines + the fields below), ``<out>/train_log.csv``,
+``<out>/config.json`` and, at the end, ``<out>/summary.json`` (loop summary + ``summarize()`` per domain).
 
 Sync mode alternates: serve ``serve_batch`` (B) requests through BP-05's ``serve(..., on_sample=pool.put)``, then
 take ``train_steps`` (M) optimizer steps if the pool holds enough samples, publishing every ``sync_every`` (N)
@@ -26,15 +34,25 @@ Each request is logged in BP-05's ``RequestLog`` format plus ``index`` (position
 version of each round is in ``versions``) and ``pool_size`` after its sample was added.
 """
 
+import argparse
+import json
 import threading
 import time
+from pathlib import Path
 
+import torch
+
+from mini_aurora.baseline.checkpoint import save_draft
+from mini_aurora.device import get_device
+from mini_aurora.models.target import load_target, load_tokenizer
+from mini_aurora.models.vocab import DEFAULT_VOCAB, load_vocab_mapping
 from mini_aurora.online.pool import PoolClosed, SamplePool
 from mini_aurora.online.publish import WeightSlot, snapshot
+from mini_aurora.online.start import MODES, start
 from mini_aurora.online.trainer import OnlineTrainer
 from mini_aurora.server.drafter import Drafter
 from mini_aurora.server.log import RequestLog
-from mini_aurora.server.serve import serve
+from mini_aurora.server.serve import DEFAULT_STREAM, load_requests, serve, summarize
 
 
 class DeviceLock:
@@ -208,3 +226,87 @@ class OnlineLoop:
             "peak_mem_gb": round(self.trainer.peak_mem_gb, 2),
             "wall_s": round(seconds, 1),
         }
+
+
+def main() -> None:
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--mode", choices=["sync", "async"], default="sync")
+    p.add_argument("--start", choices=MODES, default="day0")
+    p.add_argument("--draft", default=None, help="BP-04 checkpoint file or directory (--start draft)")
+    p.add_argument("-n", type=int, default=300, help="number of requests")
+    p.add_argument("--stream", default=DEFAULT_STREAM)
+    p.add_argument("--domain", default=None, choices=["chat", "code", "math"])
+    p.add_argument("--out", required=True, help="run directory, e.g. outputs/online/<run>")
+    p.add_argument("--overwrite", action="store_true", help="replace an existing run in --out")
+    p.add_argument("--sync-every", type=int, default=10, help="publish every N optimizer steps")
+    p.add_argument("--serve-batch", type=int, default=None, help="sync: requests per round (default batch x accum)")
+    p.add_argument("--train-steps", type=int, default=1, help="sync: optimizer steps per round")
+    p.add_argument("--batch-size", type=int, default=2)
+    p.add_argument("--accumulation", type=int, default=4)
+    p.add_argument("--lr", type=float, default=None, help="default 1e-4 (day0) / 1e-5 (draft)")
+    p.add_argument("--max-grad-norm", type=float, default=0.5)
+    p.add_argument("--max-seq-len", type=int, default=1024, help="truncate training samples (memory)")
+    p.add_argument("--max-pool-size", type=int, default=128, help="max_sample_pool_size")
+    p.add_argument("--buffer-threshold", type=int, default=None, help="min pool size before training (default batch x accum)")
+    p.add_argument("--no-grad-ckpt", action="store_true")
+    p.add_argument("-k", type=int, default=3, help="guesses per round")
+    p.add_argument("--max-new-tokens", type=int, default=128)
+    p.add_argument("--sampling", action="store_true", help="speculative sampling instead of greedy")
+    p.add_argument("--temperature", type=float, default=1.0)
+    p.add_argument("--bf16", action="store_true", help="bf16 target and served draft (default fp32; trainer stays fp32)")
+    p.add_argument("--check", action="store_true", help="compare each output with target-only greedy (slow)")
+    p.add_argument("--save-draft", action="store_true", help="save the trainer's final draft to <out>/checkpoints")
+    p.add_argument("--vocab", default=DEFAULT_VOCAB)
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--device", default=None)
+    p.add_argument("--quiet", action="store_true")
+    args = p.parse_args()
+
+    out = Path(args.out)
+    if (out / "requests.jsonl").exists():
+        if not args.overwrite:
+            raise SystemExit(f"{out / 'requests.jsonl'} exists; pass --overwrite or pick another --out")
+        (out / "requests.jsonl").unlink()
+    out.mkdir(parents=True, exist_ok=True)
+
+    torch.manual_seed(args.seed)
+    device = get_device(args.device)
+    dtype = torch.bfloat16 if args.bf16 else torch.float32
+    target, tokenizer = load_target(device=device, dtype=dtype), load_tokenizer()
+    drafter, trainer = start(
+        target, args.start, load_vocab_mapping(args.vocab), draft_path=args.draft, k=args.k, serve_dtype=dtype,
+        lr=args.lr, device=device, batch_size=args.batch_size, accumulation=args.accumulation,
+        max_grad_norm=args.max_grad_norm, max_seq_len=args.max_seq_len, gradient_checkpointing=not args.no_grad_ckpt,
+        log_path=out / "train_log.csv",
+    )
+    pool = SamplePool(args.max_pool_size, args.buffer_threshold or trainer.samples_per_step)
+    rows = load_requests(args.stream, args.n, args.domain)
+    config = {**vars(args), "requests": len(rows), "lr": trainer.lr, "samples_per_step": trainer.samples_per_step,
+              "buffer_threshold": pool.buffer_threshold, "serve_batch": args.serve_batch or trainer.samples_per_step,
+              "start_version": drafter.version, "device": device.type, "dtype": str(dtype).split(".")[-1]}
+    (out / "config.json").write_text(json.dumps(config, indent=2))
+    print(json.dumps(config, indent=2))
+
+    with RequestLog(out / "requests.jsonl") as log:
+        loop = OnlineLoop(target, tokenizer, drafter, trainer, pool, sync_every=args.sync_every,
+                          max_new_tokens=args.max_new_tokens, greedy=not args.sampling, temperature=args.temperature,
+                          seed=args.seed, check=args.check, log=log, verbose=not args.quiet)
+        try:
+            if args.mode == "sync":
+                summary = loop.run_sync(rows, args.serve_batch, args.train_steps)
+            else:
+                summary = loop.run_async(rows)
+        finally:
+            trainer.close()
+    summary["domains"] = summarize(loop.records)
+    (out / "summary.json").write_text(json.dumps(summary, indent=2))
+    if args.save_draft:
+        print(f"draft -> {save_draft(trainer.draft, out / 'checkpoints', trainer.step_count, config=config)}")
+    print(json.dumps(summary, indent=2))
+    print(f"run -> {out}")
+    if args.check and not all(r["match"] for r in loop.records):
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
