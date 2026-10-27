@@ -79,15 +79,23 @@ summary, and is rerun from the start.
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | E1 | day0 | mixed | 3000 | 0.000 | 0.000 / 0.000 | 0.000 / 0.000 / 0.000 | 22.0 | ×0.67 | NVIDIA A100 MIG 1g.5gb | – | – |
 | E1 | online_day0 | mixed | 3000 | 0.345 | 0.015 / 0.530 | 0.247 / 0.073 / 0.025 | 26.3 | – | Tesla T4 | – | – |
+| E1 | online_day0 | mixed | 3000 | 0.345 | 0.015 / 0.530 | 0.247 / 0.073 / 0.025 | 40.6 | – | NVIDIA A100-SXM4-40GB | – | – |
 | E1 | target_only | mixed | 3000 | – | – | – | 33.0 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
 | E2 | online_static | domain_shift | 1200 | 0.375 | 0.319 / 0.385 | 0.276 / 0.079 / 0.020 | 26.8 | ×1.06 | Tesla T4 | – | checkpoints_8ep |
 | E2 | static | domain_shift | 1200 | 0.327 | 0.315 / 0.242 | 0.246 / 0.065 / 0.016 | 25.1 | ×1.00 | Tesla T4 | – | draft_step000896.pt |
 | E2 | static | domain_shift | 1200 | 0.327 | 0.315 / 0.242 | 0.246 / 0.065 / 0.016 | 26.9 | ×0.84 | NVIDIA A100 MIG 1g.5gb | – | draft_step000896.pt |
 | E2 | target_only | domain_shift | 1200 | – | – | – | 25.2 | ×1.00 | Tesla T4 | – | – |
 | E2 | target_only | domain_shift | 1200 | – | – | – | 32.1 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
+| E3 | online_static | ordered | 3000 | 0.441 | 0.319 / 0.580 | 0.311 / 0.101 / 0.029 | 43.0 | – | NVIDIA A100-SXM4-40GB | – | checkpoints_8ep |
 | E3 | online_static | ordered | 3000 | 0.441 | 0.319 / 0.580 | 0.311 / 0.101 / 0.029 | 27.1 | – | Tesla T4 | – | checkpoints_8ep |
 | E3 | static | ordered | 3000 | 0.326 | 0.315 / 0.258 | 0.244 / 0.066 / 0.016 | 28.6 | ×0.87 | NVIDIA A100 MIG 1g.5gb | – | draft_step000896.pt |
 | E3 | target_only | ordered | 3000 | – | – | – | 32.8 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
+| E4 | online_day0 | mixed | 3000 | 0.453 | 0.022 / 0.639 | 0.301 / 0.109 / 0.043 | 44.5 | – | NVIDIA A100-SXM4-40GB | – | --lr 3e-4 |
+| E4 | online_day0 | mixed | 3000 | 0.197 | 0.005 / 0.353 | 0.169 / 0.023 / 0.005 | 33.8 | – | NVIDIA A100-SXM4-40GB | – | --lr 3e-5 |
+| E4 | online_day0 | mixed | 3000 | 0.345 | 0.015 / 0.530 | 0.247 / 0.073 / 0.025 | 38.6 | – | NVIDIA A100-SXM4-40GB | – | --mode async |
+| E4 | online_day0 | mixed | 3000 | 0.336 | 0.000 / 0.533 | 0.240 / 0.071 / 0.024 | 38.7 | – | NVIDIA A100-SXM4-40GB | – | --sync-every 20 |
+| E4 | online_day0 | mixed | 3000 | 0.349 | 0.039 / 0.530 | 0.250 / 0.074 / 0.025 | 38.4 | – | NVIDIA A100-SXM4-40GB | – | --sync-every 5 |
+| E4 | online_day0 | mixed | 3000 | 0.306 | 0.000 / 0.519 | 0.219 / 0.065 / 0.022 | 37.4 | – | NVIDIA A100-SXM4-40GB | – | --sync-every 50 |
 
 ### E1 — day-0 deployment (mixed stream)
 
@@ -141,4 +149,31 @@ conversations, so the chat block is in-sample for the frozen draft; code and mat
 
 ### E4 — sensitivity (publish interval, learning rate, sync vs async)
 
-Six `online_day0` settings on the mixed stream (`--grid N5 | N20 | N50 | lr3e-4 | lr3e-5 | async`), pending.
+Six `online_day0` runs on the mixed stream (3000 requests, 375 optimizer steps each), one setting changed from the
+E1 defaults (sync, N = 10, LR 1e-4, batch 2 × accumulation 4), all on a Zaratan NVIDIA A100-SXM4-40GB:
+
+| setting | publishes | τ̄ all | chat / code / math | τ̄ at request 1000 / 2000 / last 50 |
+|---|---|---|---|---|
+| N = 5 | 75 | 0.349 | 0.212 / 0.346 / 0.507 | 0.31 / 0.49 / 0.55 |
+| **N = 10 (E1 default)** | 37 | 0.345 | 0.209 / 0.342 / 0.500 | 0.30 / 0.49 / 0.54 |
+| N = 20 | 18 | 0.336 | 0.204 / 0.333 / 0.485 | 0.29 / 0.49 / 0.55 |
+| N = 50 | 7 | 0.306 | 0.190 / 0.300 / 0.438 | 0.27 / 0.45 / 0.54 |
+| **LR 3e-4** | 37 | **0.453** | 0.270 / 0.483 / 0.635 | 0.43 / 0.62 / **0.66** |
+| LR 3e-5 | 37 | 0.197 | 0.120 / 0.179 / 0.294 | 0.16 / 0.26 / 0.37 |
+| async (N = 10) | 37 | 0.345 | 0.209 / 0.342 / 0.500 | 0.30 / 0.49 / 0.54 |
+
+- **Learning rate dominates.** 3e-4 reaches 0.43 by request 1000, where 1e-4 is at 0.30, and ends at 0.66 over the
+  last 50 requests with no sign of instability; 3e-5 learns 3× slower. The PLAN.md default of 1e-4 was conservative.
+- **Publish interval matters, but mildly.** Fresher weights help monotonically (N = 5 > 10 > 20 > 50: 0.349 → 0.306
+  overall), and the cost is mostly early: by request 2000 N = 5–20 are all at 0.49, and even N = 50 (a publish
+  every 400 requests) ends at 0.54. Staleness up to ~50 steps costs ~12 % τ̄ overall at this scale.
+- **Async equals sync on one GPU.** Identical τ̄, curve and publish count: with the FIFO device lock the trainer
+  takes one step whenever 8 samples are ready, which on a single GPU is exactly the sync schedule, so Δ is the same
+  (the single-device asynchrony caveat in BP-06). Measuring real asynchrony needs separate serving and training GPUs.
+
+### Cross-device checks
+
+E1 `online_day0` and E3 `online_static` were also run on a Zaratan NVIDIA A100-SXM4-40GB (2.4 h and 2.2 h): τ̄, α, the
+per-domain numbers and the per-window curves are identical to the Kaggle T4 runs (0.345 and 0.441), as for the
+static arms. Greedy decoding plus a fixed seed makes the whole online loop reproducible across GPUs; only tok/s
+differs.
