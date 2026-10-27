@@ -19,6 +19,7 @@ cd "${REPO:-$SCRATCH/repo}"
 LIMIT="${LIMIT-20}"          # LIMIT= (empty) for the whole chat pool
 EPOCHS="${EPOCHS:-1}"
 OUT="$SCRATCH/outputs/1p7b${LIMIT:+_limit$LIMIT}_${EPOCHS}ep"
+DUMP="${TMPDIR:-/tmp}/bp09_${SLURM_JOB_ID}/hidden_states"   # node-local: the 1.7B dump is ~8 GB at full size, too big for the 10 GB home
 export HF_HOME="$SCRATCH/hf" HF_HUB_OFFLINE=1 WANDB_MODE=offline MINI_AURORA_DEVICE=cuda
 export MINI_AURORA_TARGET="Qwen/Qwen3-1.7B"
 export MINI_AURORA_DRAFT_CONFIG="$PWD/examples/zaratan-qwen3-1.7b/draft_config.json"
@@ -27,17 +28,17 @@ nvidia-smi --query-gpu=name,memory.total --format=csv
 python -c "import torch;print('torch',torch.__version__,torch.version.cuda)"
 
 t0=$(date +%s)
-python -m mini_aurora.baseline.dump --out "$OUT/hidden_states" ${LIMIT:+--limit $LIMIT}
+python -m mini_aurora.baseline.dump --out "$DUMP" ${LIMIT:+--limit $LIMIT}
 t1=$(date +%s)
-python -m mini_aurora.baseline.train --dump-dir "$OUT/hidden_states" --out "$OUT/checkpoints" --epochs "$EPOCHS"
+python -m mini_aurora.baseline.train --dump-dir "$DUMP" --out "$OUT/checkpoints" --epochs "$EPOCHS"
 t2=$(date +%s)
-python -m mini_aurora.baseline.evaluate --dump-dir "$OUT/hidden_states" --ckpt "$OUT/checkpoints/$(printf 'draft_step%06d.pt' "$(cat "$OUT/checkpoints/latest.txt")")" --out "$OUT/evaluate.json"
+python -m mini_aurora.baseline.evaluate --dump-dir "$DUMP" --ckpt "$OUT/checkpoints/$(printf 'draft_step%06d.pt' "$(cat "$OUT/checkpoints/latest.txt")")" --out "$OUT/evaluate.json"
 t3=$(date +%s)
 if [ -z "$LIMIT" ]; then
   python -m mini_aurora.server.serve -n 100 --heldout --check --draft "$OUT/checkpoints" --log "$OUT/serve_heldout.jsonl" | tee "$OUT/serve_heldout.txt"
 fi
 t4=$(date +%s)
 echo "{\"dump_s\": $((t1-t0)), \"train_s\": $((t2-t1)), \"evaluate_s\": $((t3-t2)), \"serve_s\": $((t4-t3)), \"limit\": \"$LIMIT\", \"epochs\": $EPOCHS}" | tee "$OUT/timings.json"
-rm -rf "$OUT/hidden_states"      # 1.7B dump is ~8 GB at full size; not kept
+rm -rf "$DUMP"
 sacct -j "$SLURM_JOB_ID" --format=JobID,Elapsed,AllocTRES%40,State -X
 
