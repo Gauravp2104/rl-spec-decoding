@@ -77,6 +77,8 @@ summary, and is rerun from the start.
 
 | exp | arm | stream | n | τ̄ | τ̄ first/last 100 | α1 / α2 / α3 | tok/s | × target-only | device | lossless | draft / loop args |
 |---|---|---|---|---|---|---|---|---|---|---|---|
+| E1 | day0 | mixed | 3000 | 0.000 | 0.000 / 0.000 | 0.000 / 0.000 / 0.000 | 22.0 | ×0.67 | NVIDIA A100 MIG 1g.5gb | – | – |
+| E1 | online_day0 | mixed | 3000 | 0.345 | 0.015 / 0.530 | 0.247 / 0.073 / 0.025 | 26.3 | – | Tesla T4 | – | – |
 | E1 | target_only | mixed | 3000 | – | – | – | 33.0 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
 | E2 | online_static | domain_shift | 1200 | 0.375 | 0.319 / 0.385 | 0.276 / 0.079 / 0.020 | 26.8 | ×1.06 | Tesla T4 | – | checkpoints_8ep |
 | E2 | static | domain_shift | 1200 | 0.327 | 0.315 / 0.242 | 0.246 / 0.065 / 0.016 | 25.1 | ×1.00 | Tesla T4 | – | draft_step000896.pt |
@@ -86,15 +88,22 @@ summary, and is rerun from the start.
 | E3 | static | ordered | 3000 | 0.326 | 0.315 / 0.258 | 0.244 / 0.066 / 0.016 | 28.6 | ×0.87 | NVIDIA A100 MIG 1g.5gb | – | draft_step000896.pt |
 | E3 | target_only | ordered | 3000 | – | – | – | 32.8 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
 
-Results files: `results/<E>/<arm>_<stream>__<machine>.json` (the `summary.json` of each run; `requests.jsonl`
-logs stay with the run directories). The same static arm run on a T4 and on an A100 slice gives identical τ̄, α
-and per-window curves (greedy, same weights), so τ̄ is compared across machines and tok/s only within one.
-
 ### E1 — day-0 deployment (mixed stream)
 
-Target-only reference: 33.0 tok/s (slice). `day0` (untrained draft, no training) hit its 4 h walltime at
-2743/3000 requests and is rerun with 6 h; `online_day0` pending (Zaratan A100 queue). BP-06's 300-request fp32
-day-0 run on the same stream (`mini_aurora/online/README.md`): τ̄ 0.039 → 0.246 over 300 requests.
+3000 mixed requests (1000 each of chat / code / math, shuffled). `online_day0` on a Kaggle T4, the loop's defaults
+(sync, publish every 10 steps, batch 2 × accumulation 4, LR 1e-4): 375 optimizer steps, 37 publishes, 3.7 h.
+
+| arm | τ̄ all | chat | code | math | τ̄ per 100 requests |
+|---|---|---|---|---|---|
+| `day0` (untrained draft, no training) | 0.000 | 0.000 | 0.000 | 0.000 | 0 throughout |
+| `online_day0` | **0.345** | 0.209 | 0.342 | 0.500 | 0.015 → 0.30 (req 1000) → 0.45 (req 2000) → 0.53–0.56 (last 500) |
+| frozen BP-04 draft, for reference (E3 static, same domains) | 0.326 | 0.320 | 0.422 | 0.258 | flat |
+
+Starting from a random draft, online training passes the offline-trained static draft's τ̄ around request 1100 and
+ends at 0.54 over the last 50 requests, ~60 % above it and still rising. Math learns fastest and chat slowest, the
+same ordering as BP-06's 300-request run, which this extends 10×. Speed on the T4: 26.3 tok/s (×1.04 of the T4
+target-only reference from E2); the untrained draft serves at 22.0 tok/s on the slice (×0.67 of target-only), the
+cost of drafting with nothing accepted.
 
 ### E2 — static vs online under domain shift (chat → code → math)
 
