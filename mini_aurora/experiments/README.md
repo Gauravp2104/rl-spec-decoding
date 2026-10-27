@@ -21,6 +21,7 @@ python -m mini_aurora.experiments.run E2 online_static               # BP-06 loo
 python -m mini_aurora.experiments.run E1 online_day0 -n 300          # BP-06 loop from a random draft
 python -m mini_aurora.experiments.run E4 online_day0 --grid N5       # one E4 setting: N5 / N20 / N50 / lr3e-4 / lr3e-5 / async
 python -m mini_aurora.experiments.table                              # results table from outputs/experiments/
+python -m mini_aurora.experiments.plot_compare 'E2' <static run> <online run> --labels static online --out figures/E2.png
 python -m pytest -q mini_aurora/tests/test_experiments.py
 ```
 
@@ -99,6 +100,8 @@ summary, and is rerun from the start.
 
 ### E1 — day-0 deployment (mixed stream)
 
+![E1](figures/E1_rolling_tau.png)
+
 3000 mixed requests (1000 each of chat / code / math, shuffled). `online_day0` on a Kaggle T4, the loop's defaults
 (sync, publish every 10 steps, batch 2 × accumulation 4, LR 1e-4): 375 optimizer steps, 37 publishes, 3.7 h.
 
@@ -116,6 +119,8 @@ cost of drafting with nothing accepted.
 
 ### E2 — static vs online under domain shift (chat → code → math)
 
+![E2](figures/E2_rolling_tau.png)
+
 600 chat → 300 code → 300 math, both draft arms from the same frozen BP-04 draft, on a Kaggle T4:
 
 | arm | τ̄ all | chat | code | math | τ̄ per 100 requests through the math shift |
@@ -130,6 +135,8 @@ to 0.26 on math and stays there, the online draft dips to 0.34 and recovers to 0
 is hardware-bound while τ̄ is not.
 
 ### E3 — ordered stream
+
+![E3](figures/E3_rolling_tau.png)
 
 1000 chat → 1000 code → 1000 math, both draft arms from the frozen BP-04 draft; static on a Zaratan slice,
 online on a Kaggle T4 (sync, N = 10, LR 1e-5; 375 optimizer steps, 38 publishes, 3.6 h):
@@ -162,11 +169,16 @@ E1 defaults (sync, N = 10, LR 1e-4, batch 2 × accumulation 4), all on a Zaratan
 | LR 3e-5 | 37 | 0.197 | 0.120 / 0.179 / 0.294 | 0.16 / 0.26 / 0.37 |
 | async (N = 10) | 37 | 0.345 | 0.209 / 0.342 / 0.500 | 0.30 / 0.49 / 0.54 |
 
+![E4 LR](figures/E4_lr.png)
+![E4 N](figures/E4_sync_every.png)
+
 - **Learning rate dominates.** 3e-4 reaches 0.43 by request 1000, where 1e-4 is at 0.30, and ends at 0.66 over the
   last 50 requests with no sign of instability; 3e-5 learns 3× slower. The PLAN.md default of 1e-4 was conservative.
 - **Publish interval matters, but mildly.** Fresher weights help monotonically (N = 5 > 10 > 20 > 50: 0.349 → 0.306
   overall), and the cost is mostly early: by request 2000 N = 5–20 are all at 0.49, and even N = 50 (a publish
   every 400 requests) ends at 0.54. Staleness up to ~50 steps costs ~12 % τ̄ overall at this scale.
+![E4 async](figures/E4_async.png)
+
 - **Async equals sync on one GPU.** Identical τ̄, curve and publish count: with the FIFO device lock the trainer
   takes one step whenever 8 samples are ready, which on a single GPU is exactly the sync schedule, so Δ is the same
   (the single-device asynchrony caveat in BP-06). Measuring real asynchrony needs separate serving and training GPUs.

@@ -144,6 +144,20 @@ Merge order: **BP-01 → (BP-02, BP-03) → (BP-04, BP-05) → BP-06 → BP-07 �
 | E4 | Sensitivity | Sync interval N ∈ {5, 20, 50}, LR, sync vs async |
 
 Results table + plots go back into this document.
+- **Result (2026-10-27):** all four experiments run at full stream size (E1/E3/E4: 3000 requests, E2: 1200), fp32,
+  K = 3, the frozen BP-04 draft (release `bp04-static-v1`), on Kaggle T4 and Zaratan A100 (identical τ̄ across GPUs).
+  Table, figures and notes: `mini_aurora/experiments/README.md`; summaries: `mini_aurora/experiments/results/`.
+
+  | claim | result |
+  |---|---|
+  | E1 day-0 deployment | online day-0 τ̄ 0.345 over 3000 mixed requests (0.015 first 100 → 0.54 last 50); passes the offline static draft (0.327) by request ~1100; untrained draft 0.000 |
+  | E2 static vs online under shift | static 0.327 vs online **0.375**; at the chat → math shift static falls to 0.26 and stays, online recovers to 0.39 within 100 requests (math +43 %) |
+  | E3 ordered stream | static 0.326 vs online **0.441**; static is flat within each domain (0.32 / 0.42 / 0.26), online recovers from the math shift within ~200 requests and ends at 0.59 (math +89 %) |
+  | E4 sensitivity | LR dominates: 3e-4 → 0.453 (last 50: 0.66), 1e-4 → 0.345, 3e-5 → 0.197; publish interval N = 5/10/20/50 → 0.349/0.345/0.336/0.306; async = sync exactly on one GPU |
+  | speed | T4: online ×1.04–1.08 of target-only, static ×1.00; A100 slice ×0.84–0.87; Macs ×0.42–0.59 (BP-05/06). τ̄ is hardware-independent, tok/s is not |
+
+  Caveat: the chat requests of the domain-shift stream (all 600) and 900/1000 of the mixed and ordered streams
+  are BP-04 training conversations, so the static draft's chat τ̄ is in-sample; code and math are unseen.
 
 ### BP-09 — (Optional) CUDA portability / scale check (`bp/09-cuda-scale-check`)
 - Same `mini_aurora` code on Colab/cluster CUDA with Qwen3-1.7B/4B and FlexAttention re-enabled.
