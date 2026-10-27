@@ -85,6 +85,7 @@ summary, and is rerun from the start.
 | E2 | static | domain_shift | 1200 | 0.327 | 0.315 / 0.242 | 0.246 / 0.065 / 0.016 | 26.9 | ×0.84 | NVIDIA A100 MIG 1g.5gb | – | draft_step000896.pt |
 | E2 | target_only | domain_shift | 1200 | – | – | – | 25.2 | ×1.00 | Tesla T4 | – | – |
 | E2 | target_only | domain_shift | 1200 | – | – | – | 32.1 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
+| E3 | online_static | ordered | 3000 | 0.441 | 0.319 / 0.580 | 0.311 / 0.101 / 0.029 | 27.1 | – | Tesla T4 | – | checkpoints_8ep |
 | E3 | static | ordered | 3000 | 0.326 | 0.315 / 0.258 | 0.244 / 0.066 / 0.016 | 28.6 | ×0.87 | NVIDIA A100 MIG 1g.5gb | – | draft_step000896.pt |
 | E3 | target_only | ordered | 3000 | – | – | – | 32.8 | ×1.00 | NVIDIA A100 MIG 1g.5gb | – | – |
 
@@ -122,9 +123,21 @@ is hardware-bound while τ̄ is not.
 
 ### E3 — ordered stream
 
-1000 chat → 1000 code → 1000 math (slice). `static`: τ̄ 0.326 overall, chat 0.320 / code 0.422 / math 0.258, flat
-within each block and equal to E2's per-segment numbers: the frozen draft's acceptance is a property of the domain,
-not of the request order. Target-only 32.8 tok/s, static 28.6 (×0.87). `online_static` pending.
+1000 chat → 1000 code → 1000 math, both draft arms from the frozen BP-04 draft; static on a Zaratan slice,
+online on a Kaggle T4 (sync, N = 10, LR 1e-5; 375 optimizer steps, 38 publishes, 3.6 h):
+
+| arm | τ̄ all | chat | code | math | τ̄ per 100 requests at the code → math boundary |
+|---|---|---|---|---|---|
+| `static` (no training) | 0.326 | 0.320 | 0.422 | 0.258 | 0.42 → 0.26, flat for the whole block |
+| `online_static` | **0.441** | 0.349 | 0.493 | 0.488 | 0.52 → 0.37, then 0.42 … 0.58 by the end of the block |
+
+Same picture as E2 with longer blocks: the frozen draft's acceptance is set by the domain (chat 0.32 / code 0.42 /
+math 0.26, flat within each block), while the online draft keeps improving inside every block and recovers from
+the math shift within ~200 requests, ending at 0.59 over the last 50 requests. On math, +89 % τ̄ relative to
+static. With 1000 requests per domain the online draft also ends higher than in E2 (0.58 vs 0.39 on math), so the
+recovery in E2 was limited by the 300-request segment, not by the method. Speed on the T4: 27.1 tok/s (×1.08 of the
+T4 target-only reference). Caveat: the 1000 chat requests (900 of them) were static-baseline training
+conversations, so the chat block is in-sample for the frozen draft; code and math are unseen.
 
 ### E4 — sensitivity (publish interval, learning rate, sync vs async)
 
