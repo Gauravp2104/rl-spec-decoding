@@ -50,7 +50,7 @@ same experiment and stream.
 
 ## Running the arms
 
-One arm per GPU job. Three places have run them so far, all fp32 target and served draft, K = 3, 128 new tokens,
+One arm per GPU job. Three machines ran the arms, all fp32 target and served draft, K = 3, 128 new tokens,
 the frozen BP-04 draft from release `bp04-static-v1`:
 
 - **Zaratan A100 MIG slices** (`GPU=a100_1g.5gb:1 PART=gpu-a100_1g.5gb`, 12 SU/h, no queue): the static arms
@@ -74,7 +74,7 @@ summary, and is rerun from the start.
 
 ## Results
 
-<!-- table.py output goes here once the arms have run; per-experiment notes below -->
+<!-- table.py output (results/); per-experiment notes below -->
 
 | exp | arm | stream | n | τ̄ | τ̄ first/last 100 | α1 / α2 / α3 | tok/s | × target-only | device | lossless | draft / loop args |
 |---|---|---|---|---|---|---|---|---|---|---|---|
