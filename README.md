@@ -1,7 +1,7 @@
 # Off-Policy GRPO for Online Speculative Decoding
 
 MSAI-635 Group 2 project: Gaurav Prakash, Sanjana Kommareddy, Simran Kharbanda.
-Proposal: [docs/MSAI635_project_proposal_Group2.pdf](docs/MSAI635_project_proposal_Group2.pdf).
+Proposal: [reports/proposal/MSAI635_project_proposal_Group2.pdf](reports/proposal/MSAI635_project_proposal_Group2.pdf); interim report: [reports/interim/interim_report.pdf](reports/interim/interim_report.pdf).
 
 ## What this is
 
