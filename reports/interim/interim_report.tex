@@ -69,28 +69,28 @@ The reproduction is split into nine work items, each with a concrete ``done when
 \centering\small
 \caption{Reproduction work items and their status.}
 \label{tab:progress}
-\footnotesize\begin{tabular}{@{}p{8.4cm}p{6.0cm}l@{}}
+\footnotesize\begin{tabular}{@{}rp{7.9cm}p{5.8cm}l@{}}
 \toprule
-Work & Done-when criterion & Status \\
+\# & Work & Done-when criterion & Status \\
 \midrule
-Mac environment, device layer (CUDA $\to$ MPS $\to$ CPU), EAGLE-3 code installed without CUDA-only dependencies
+1 & Mac environment, device layer (CUDA $\to$ MPS $\to$ CPU), EAGLE-3 code installed without CUDA-only dependencies
   & Draft and EAGLE-3 modules import; parser and vocab tests pass & Done \\
-Public datasets (chat, code, math), three request streams, 24K draft-vocab mapping
+2 & Public datasets (chat, code, math), three request streams, 24K draft-vocab mapping
   & Streams and cached mapping on disk & Done \\
-Qwen3-0.6B target with auxiliary hidden-state capture; EAGLE-3 draft and trainer step on MPS
+3 & Qwen3-0.6B target with auxiliary hidden-state capture; EAGLE-3 draft and trainer step on MPS
   & Draft overfits one batch in 200 steps; time and memory measured & Done \\
-Offline static EAGLE-3 baseline trained on held-in chat data
+4 & Offline static EAGLE-3 baseline trained on held-in chat data
   & $\taubar$ clearly $>0$ on held-out chat & Done \\
-Speculative-decoding server: draft, verify, accept, KV cache, logging, training samples, weight hot-swap
+5 & Speculative-decoding server: draft, verify, accept, KV cache, logging, training samples, weight hot-swap
   & Greedy output token-identical to plain decoding on 50 prompts & Done \\
-Online loop: sample pool, trainer, versioned weight publish; sync and async; day-0 and with-draft starts
+6 & Online loop: sample pool, trainer, versioned weight publish; sync and async; day-0 and with-draft starts
   & $\taubar$ rises over 300 day-0 requests & Done \\
-Metrics, latency bench, CSV/summary writer, plots, online losslessness regression test
+7 & Metrics, latency bench, CSV/summary writer, plots, online losslessness regression test
   & Plots and tables from the run logs & Done \\
 \midrule
-Controlled experiments: domain shift, ordered stream, sync interval, learning rate, sync vs.\ async
+8 & Controlled experiments: domain shift, ordered stream, sync interval, learning rate, sync vs.\ async
   & Results table and figures & Next \\
-Scale check on a CUDA GPU with Qwen3-1.7B/4B & Same code runs on CUDA & Optional \\
+9 & Scale check on a CUDA GPU with Qwen3-1.7B/4B & Same code runs on CUDA & Optional \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -223,29 +223,26 @@ depend on hardware; we also report $\alpha_i$, measured and estimated speed-up, 
 \label{sec:results}
 
 All runs use MPS on Mac laptops, greedy decoding, $K=3$ guesses per round and up to 128 new tokens. We report two
-numbers per run: the \textbf{token acceptance} $\taubar$ (draft guesses accepted per round, out of 3; papers often
-report $1+\taubar$, tokens per target pass) and the \textbf{speed-up} over target-only decoding of the same
-requests. Table~\ref{tab:main} summarises every draft we have run.
+numbers per run: $\taubar$, the average number of guesses accepted per round (higher is better, at most 3), and
+the measured speed relative to decoding with the target alone ($>1\times$ means faster). ``Lossless'' counts
+requests whose output was token-identical to the target alone.
 
 \begin{table}[t]
 \centering\small
-\caption{Main results. Speed-up is measured against target-only decoding of the same requests in the same run.
-Wherever checked (450 requests), output was token-identical to target-only decoding.}
+\caption{Main results for each draft model.}
 \label{tab:main}
-\setlength{\tabcolsep}{5pt}
-\begin{tabular}{@{}llccc@{}}
+\footnotesize\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}llllccc@{}}
 \toprule
-Draft & Requests & $\taubar$ (of 3) & Tokens / target pass & Speed-up \\
+Draft model & Starts from & Online & Requests & $\taubar$ & Speed vs.\ target & Lossless \\
 \midrule
-Untrained (lower bound) & 50 mixed & 0.00 & 1.00 & 0.56$\times$ \\
-Overfit to the answers (upper bound) & 50 mixed & 2.60 & 3.60 & 2.0$\times$ \\
+Untrained (sanity check) & random & no & 50 mixed & 0.00 & 0.56$\times$ & 50/50 \\
+Overfit (upper bound) & memorised & no & 50 mixed & 2.60 & 2.0$\times$ & 50/50 \\
 \midrule
-Static, 2 epochs offline & 100 held-out chat & 0.18 & 1.18 & 0.53$\times$ \\
-\textbf{Static, 8 epochs offline (baseline)} & 100 held-out chat & \textbf{0.31} & \textbf{1.31} & \textbf{0.59$\times$} \\
-\midrule
-Online day-0, whole run & 300 mixed & 0.15 & 1.15 & 0.53$\times$ \\
-\textbf{Online day-0, last 50 requests} & 50 mixed & \textbf{0.25} & \textbf{1.25} & -- \\
-Online with-draft (short test) & 20 mixed & $\approx$0.26 & 1.26 & -- \\
+\textbf{Static baseline} & offline training & no & 100 held-out & \textbf{0.31} & 0.59$\times$ & 100/100 \\
+\textbf{Online day-0}, whole run & random & yes & 300 mixed & 0.15 & 0.53$\times$ & 300/300 \\
+\quad last 50 requests & & & & \textbf{0.25} & -- & \\
+Online with-draft (test) & static baseline & yes & 20 mixed & $\approx$0.26 & -- & -- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -253,35 +250,40 @@ Online with-draft (short test) & 20 mixed & $\approx$0.26 & 1.26 & -- \\
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.62\linewidth]{figures/rolling_tau.png}
-\caption{Online day-0 run: token acceptance per request (dots) and averaged over the last 50 requests (line),
-with each request's domain underneath.}
+\caption{Online day-0 run: $\taubar$ per request (dots) and averaged over the last 50 requests (line), with each
+request's domain underneath.}
 \label{fig:rolling}
 \end{figure}
 
-\paragraph{What the results say.}
+\paragraph{Static baseline.} The draft trained offline for 8 epochs guesses the target's next token correctly
+31\% of the time on held-out chat, and accepts $\taubar=0.31$ guesses per round when served.
+
+\paragraph{Online day-0.} Starting from a random draft and learning only from the 300 requests it served,
+$\taubar$ climbs from 0.04 over the first 50 requests to \textbf{0.25} over the last 50 (Figure~\ref{fig:rolling}),
+and is still rising. It learns fastest on math (0.23 over the run), then code (0.14), then chat (0.09). The weights
+were swapped 30 times during the run and every output stayed identical to the target's.
+
+\paragraph{Online with-draft.} Starting from the static baseline, the draft accepts $\approx$0.26 guesses per
+round from the first request, a level day-0 only reaches after 300 requests. A full run is the next step.
+
+\paragraph{What the numbers say.}
 \begin{enumerate}
-  \item \textbf{The output is always exact.} Speculative output matched target-only decoding on all 450 checked
-  requests, including 300 during which the online trainer replaced the draft's weights 30 times.
-  \item \textbf{Offline training works.} Eight epochs on 900 chat conversations take acceptance from 0 to 0.31.
-  \item \textbf{Online training works from scratch.} Starting from a random draft, acceptance rises from 0.04 to
-  0.25 within 300 requests (Figure~\ref{fig:rolling}) and is still rising, reaching 80\% of the static draft
-  with a sixth of its training steps. It learns fastest on math (0.32 by the end), then code (0.23), then chat
-  (0.13). Starting online training from the static draft skips this warm-up: it is at 0.26 from the first request.
-  \item \textbf{No speed-up yet.} Each round costs about 2.2 target-only steps but produces only $1+\taubar$
-  tokens, so the draft must average about 1.2 accepted guesses per round to break even; ours average 0.15--0.31,
-  almost all at the first guess. The upper-bound row shows the server itself can reach 2$\times$ when the draft
-  guesses well, so the bottleneck is draft quality.
-  \item \textbf{Staleness is small.} The served draft lags the trainer by 2 steps on average (at most 4), with no
-  effect on correctness. Precision does not change acceptance (fp32 and bf16 runs give the same curve).
+  \item \textbf{Speculative decoding here is always lossless}: 450 of 450 checked requests matched the target
+  exactly, including during live weight swaps.
+  \item \textbf{Online learning works from scratch}: with only 150 training steps, day-0 reaches 80\% of the
+  static draft, which needed 896 offline steps.
+  \item \textbf{Nearly all accepted guesses are the first guess.} Later guesses build on the draft's own earlier
+  guesses, so errors compound. This is where a reward for accepted length (GRPO) should help most.
+  \item \textbf{No speed-up yet.} A round costs about 2.2 target steps but yields only $1+\taubar$ tokens, so a
+  speed-up needs $\taubar\gtrsim1.2$. The overfit row shows the server does give 2$\times$ once guesses are good.
 \end{enumerate}
 
-\paragraph{Relation to published results.} Published EAGLE-2/3 drafts on 8B--70B targets with tree drafting
-report roughly 4--6 tokens per target pass and 3--6$\times$ speed-ups; classic speculative decoding and Medusa
-report about 2--3$\times$. We are at 1.3 tokens per pass and below 1$\times$. The gap is expected: our drafts have
-seen thousands rather than hundreds of thousands of conversations, we draft a single chain of 3 instead of a
-tree, a 0.6B target makes the draft relatively expensive (one draft step costs a tenth of a target step), and MPS
-at batch size 1 lacks production kernels and batching. We therefore compare systems \emph{against each other} on
-the same setup, with acceptance as the headline metric.
+\paragraph{Relation to published results.} Papers report tokens produced per target pass ($1+\taubar$): about 4--6
+for EAGLE-2/3 with tree drafting on 8B--70B targets, giving 3--6$\times$ speed-ups. We are at about 1.3 and below
+1$\times$. The gap is expected: our drafts have seen thousands rather than hundreds of thousands of
+conversations, we draft one chain of 3 instead of a tree, a 0.6B target makes the draft relatively expensive,
+and a laptop at batch size 1 lacks the kernels and batching of production servers. We therefore compare our
+systems against each other on the same setup, with $\taubar$ as the headline metric.
 
 \section{Issues Faced}
 
