@@ -1,0 +1,159 @@
+{
+  "experiment": "E2",
+  "claim": "Online adaptation beats static under shift",
+  "arm": "target_only",
+  "arm_desc": "no draft: target greedy decoding (the speed reference)",
+  "stream": "domain_shift",
+  "requests": 1200,
+  "k": 3,
+  "max_new_tokens": 128,
+  "draft": null,
+  "loop_args": null,
+  "device": "cuda",
+  "elapsed_s": 4238.1,
+  "overall": {
+    "requests": 1200,
+    "new_tokens": 135819,
+    "tokens_per_s": 32.1
+  },
+  "by_domain": {
+    "chat": {
+      "requests": 600,
+      "new_tokens": 67139,
+      "tokens_per_s": 31.5
+    },
+    "code": {
+      "requests": 300,
+      "new_tokens": 32026,
+      "tokens_per_s": 32.6
+    },
+    "math": {
+      "requests": 300,
+      "new_tokens": 36654,
+      "tokens_per_s": 32.6
+    }
+  },
+  "by_window": [
+    {
+      "start": 0,
+      "end": 100,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11305,
+      "tokens_per_s": 31.3
+    },
+    {
+      "start": 100,
+      "end": 200,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11364,
+      "tokens_per_s": 31.7
+    },
+    {
+      "start": 200,
+      "end": 300,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11327,
+      "tokens_per_s": 31.5
+    },
+    {
+      "start": 300,
+      "end": 400,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 10976,
+      "tokens_per_s": 31.5
+    },
+    {
+      "start": 400,
+      "end": 500,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 10626,
+      "tokens_per_s": 31.5
+    },
+    {
+      "start": 500,
+      "end": 600,
+      "domains": [
+        "chat"
+      ],
+      "requests": 100,
+      "new_tokens": 11541,
+      "tokens_per_s": 31.7
+    },
+    {
+      "start": 600,
+      "end": 700,
+      "domains": [
+        "code"
+      ],
+      "requests": 100,
+      "new_tokens": 10515,
+      "tokens_per_s": 32.6
+    },
+    {
+      "start": 700,
+      "end": 800,
+      "domains": [
+        "code"
+      ],
+      "requests": 100,
+      "new_tokens": 11066,
+      "tokens_per_s": 32.7
+    },
+    {
+      "start": 800,
+      "end": 900,
+      "domains": [
+        "code"
+      ],
+      "requests": 100,
+      "new_tokens": 10445,
+      "tokens_per_s": 32.6
+    },
+    {
+      "start": 900,
+      "end": 1000,
+      "domains": [
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 12257,
+      "tokens_per_s": 32.6
+    },
+    {
+      "start": 1000,
+      "end": 1100,
+      "domains": [
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 12024,
+      "tokens_per_s": 32.6
+    },
+    {
+      "start": 1100,
+      "end": 1200,
+      "domains": [
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 12373,
+      "tokens_per_s": 32.6
+    }
+  ],
+  "device_name": "NVIDIA A100 MIG 1g.5gb"
+}

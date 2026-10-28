@@ -54,7 +54,8 @@ def push_source(user: str) -> str:
         (d / "data" / "raw").mkdir(parents=True)
         shutil.copy(ROOT / "data" / "raw" / "chat.jsonl", d / "data" / "raw" / "chat.jsonl")
         (d / "data" / "streams").mkdir()
-        shutil.copy(ROOT / "data" / "streams" / "mixed.jsonl", d / "data" / "streams" / "mixed.jsonl")
+        for f in (ROOT / "data" / "streams").glob("*.jsonl"):
+            shutil.copy(f, d / "data" / "streams" / f.name)
         shutil.copytree(ROOT / "outputs" / "vocab", d / "outputs" / "vocab")
         (d / "dataset-metadata.json").write_text(json.dumps({"title": DATASET, "id": slug, "licenses": [{"name": "CC0-1.0"}]}))
         exists = DATASET in kaggle("datasets", "list", "--mine", check=False)
