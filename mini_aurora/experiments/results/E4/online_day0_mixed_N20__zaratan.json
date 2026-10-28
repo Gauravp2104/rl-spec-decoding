@@ -1,0 +1,654 @@
+{
+  "experiment": "E4",
+  "claim": "Sensitivity (sync interval, LR, sync vs async)",
+  "arm": "online_day0",
+  "arm_desc": "random draft, trained online (BP-06 loop, --start day0)",
+  "stream": "mixed",
+  "requests": 3000,
+  "k": 3,
+  "max_new_tokens": 128,
+  "draft": null,
+  "loop_args": [
+    "--sync-every",
+    "20"
+  ],
+  "device": null,
+  "loop": {
+    "requests": 3000,
+    "train_steps": 375,
+    "publishes": 18,
+    "tau": 0.336,
+    "tau_first_50": 0.0,
+    "tau_last_50": 0.5483,
+    "final_served_version": 360,
+    "final_trainer_version": 375,
+    "samples_left_in_pool": 0,
+    "pool_put_wait_s": 0.01,
+    "peak_mem_gb": 4.4,
+    "wall_s": 8979.7
+  },
+  "elapsed_s": 8991.9,
+  "overall": {
+    "requests": 3000,
+    "new_tokens": 344399,
+    "tokens_per_s": 38.7,
+    "tau": 0.336,
+    "alpha": [
+      0.24,
+      0.071,
+      0.024
+    ],
+    "tokens_per_round": 1.343
+  },
+  "by_domain": {
+    "math": {
+      "requests": 1000,
+      "new_tokens": 123638,
+      "tokens_per_s": 43.3,
+      "tau": 0.485,
+      "alpha": [
+        0.323,
+        0.115,
+        0.047
+      ],
+      "tokens_per_round": 1.491
+    },
+    "chat": {
+      "requests": 1000,
+      "new_tokens": 111576,
+      "tokens_per_s": 34.3,
+      "tau": 0.204,
+      "alpha": [
+        0.165,
+        0.032,
+        0.007
+      ],
+      "tokens_per_round": 1.212
+    },
+    "code": {
+      "requests": 1000,
+      "new_tokens": 109185,
+      "tokens_per_s": 39.0,
+      "tau": 0.333,
+      "alpha": [
+        0.241,
+        0.071,
+        0.021
+      ],
+      "tokens_per_round": 1.34
+    }
+  },
+  "by_window": [
+    {
+      "start": 0,
+      "end": 100,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11527,
+      "tokens_per_s": 29.0,
+      "tau": 0.0,
+      "alpha": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tokens_per_round": 1.009
+    },
+    {
+      "start": 100,
+      "end": 200,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11173,
+      "tokens_per_s": 30.1,
+      "tau": 0.037,
+      "alpha": [
+        0.035,
+        0.001,
+        0.001
+      ],
+      "tokens_per_round": 1.046
+    },
+    {
+      "start": 200,
+      "end": 300,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11513,
+      "tokens_per_s": 32.3,
+      "tau": 0.115,
+      "alpha": [
+        0.108,
+        0.006,
+        0.001
+      ],
+      "tokens_per_round": 1.124
+    },
+    {
+      "start": 300,
+      "end": 400,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11767,
+      "tokens_per_s": 32.8,
+      "tau": 0.132,
+      "alpha": [
+        0.129,
+        0.002,
+        0.0
+      ],
+      "tokens_per_round": 1.141
+    },
+    {
+      "start": 400,
+      "end": 500,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11561,
+      "tokens_per_s": 33.5,
+      "tau": 0.159,
+      "alpha": [
+        0.154,
+        0.004,
+        0.001
+      ],
+      "tokens_per_round": 1.168
+    },
+    {
+      "start": 500,
+      "end": 600,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11366,
+      "tokens_per_s": 34.5,
+      "tau": 0.193,
+      "alpha": [
+        0.188,
+        0.006,
+        0.0
+      ],
+      "tokens_per_round": 1.203
+    },
+    {
+      "start": 600,
+      "end": 700,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11710,
+      "tokens_per_s": 35.0,
+      "tau": 0.209,
+      "alpha": [
+        0.197,
+        0.01,
+        0.001
+      ],
+      "tokens_per_round": 1.216
+    },
+    {
+      "start": 700,
+      "end": 800,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11609,
+      "tokens_per_s": 35.2,
+      "tau": 0.219,
+      "alpha": [
+        0.204,
+        0.014,
+        0.001
+      ],
+      "tokens_per_round": 1.227
+    },
+    {
+      "start": 800,
+      "end": 900,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11699,
+      "tokens_per_s": 37.2,
+      "tau": 0.289,
+      "alpha": [
+        0.234,
+        0.047,
+        0.009
+      ],
+      "tokens_per_round": 1.296
+    },
+    {
+      "start": 900,
+      "end": 1000,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11792,
+      "tokens_per_s": 37.2,
+      "tau": 0.287,
+      "alpha": [
+        0.229,
+        0.048,
+        0.01
+      ],
+      "tokens_per_round": 1.293
+    },
+    {
+      "start": 1000,
+      "end": 1100,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11501,
+      "tokens_per_s": 39.4,
+      "tau": 0.363,
+      "alpha": [
+        0.269,
+        0.078,
+        0.016
+      ],
+      "tokens_per_round": 1.371
+    },
+    {
+      "start": 1100,
+      "end": 1200,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11081,
+      "tokens_per_s": 39.0,
+      "tau": 0.341,
+      "alpha": [
+        0.256,
+        0.068,
+        0.017
+      ],
+      "tokens_per_round": 1.347
+    },
+    {
+      "start": 1200,
+      "end": 1300,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11296,
+      "tokens_per_s": 39.0,
+      "tau": 0.354,
+      "alpha": [
+        0.255,
+        0.078,
+        0.021
+      ],
+      "tokens_per_round": 1.36
+    },
+    {
+      "start": 1300,
+      "end": 1400,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11289,
+      "tokens_per_s": 40.6,
+      "tau": 0.403,
+      "alpha": [
+        0.282,
+        0.095,
+        0.027
+      ],
+      "tokens_per_round": 1.409
+    },
+    {
+      "start": 1400,
+      "end": 1500,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11432,
+      "tokens_per_s": 40.4,
+      "tau": 0.4,
+      "alpha": [
+        0.283,
+        0.09,
+        0.028
+      ],
+      "tokens_per_round": 1.406
+    },
+    {
+      "start": 1500,
+      "end": 1600,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11409,
+      "tokens_per_s": 40.2,
+      "tau": 0.391,
+      "alpha": [
+        0.279,
+        0.085,
+        0.027
+      ],
+      "tokens_per_round": 1.399
+    },
+    {
+      "start": 1600,
+      "end": 1700,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11356,
+      "tokens_per_s": 41.0,
+      "tau": 0.413,
+      "alpha": [
+        0.282,
+        0.097,
+        0.033
+      ],
+      "tokens_per_round": 1.418
+    },
+    {
+      "start": 1700,
+      "end": 1800,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11318,
+      "tokens_per_s": 42.4,
+      "tau": 0.459,
+      "alpha": [
+        0.3,
+        0.115,
+        0.044
+      ],
+      "tokens_per_round": 1.465
+    },
+    {
+      "start": 1800,
+      "end": 1900,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11413,
+      "tokens_per_s": 41.5,
+      "tau": 0.437,
+      "alpha": [
+        0.295,
+        0.104,
+        0.038
+      ],
+      "tokens_per_round": 1.442
+    },
+    {
+      "start": 1900,
+      "end": 2000,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11443,
+      "tokens_per_s": 43.2,
+      "tau": 0.488,
+      "alpha": [
+        0.321,
+        0.122,
+        0.045
+      ],
+      "tokens_per_round": 1.494
+    },
+    {
+      "start": 2000,
+      "end": 2100,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11305,
+      "tokens_per_s": 41.9,
+      "tau": 0.45,
+      "alpha": [
+        0.302,
+        0.111,
+        0.037
+      ],
+      "tokens_per_round": 1.456
+    },
+    {
+      "start": 2100,
+      "end": 2200,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11771,
+      "tokens_per_s": 43.4,
+      "tau": 0.494,
+      "alpha": [
+        0.324,
+        0.127,
+        0.043
+      ],
+      "tokens_per_round": 1.5
+    },
+    {
+      "start": 2200,
+      "end": 2300,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11556,
+      "tokens_per_s": 42.9,
+      "tau": 0.485,
+      "alpha": [
+        0.323,
+        0.119,
+        0.043
+      ],
+      "tokens_per_round": 1.49
+    },
+    {
+      "start": 2300,
+      "end": 2400,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11914,
+      "tokens_per_s": 42.5,
+      "tau": 0.467,
+      "alpha": [
+        0.308,
+        0.114,
+        0.045
+      ],
+      "tokens_per_round": 1.472
+    },
+    {
+      "start": 2400,
+      "end": 2500,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11333,
+      "tokens_per_s": 43.1,
+      "tau": 0.484,
+      "alpha": [
+        0.323,
+        0.115,
+        0.045
+      ],
+      "tokens_per_round": 1.49
+    },
+    {
+      "start": 2500,
+      "end": 2600,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11351,
+      "tokens_per_s": 45.0,
+      "tau": 0.552,
+      "alpha": [
+        0.346,
+        0.143,
+        0.063
+      ],
+      "tokens_per_round": 1.558
+    },
+    {
+      "start": 2600,
+      "end": 2700,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11341,
+      "tokens_per_s": 42.8,
+      "tau": 0.483,
+      "alpha": [
+        0.318,
+        0.12,
+        0.044
+      ],
+      "tokens_per_round": 1.488
+    },
+    {
+      "start": 2700,
+      "end": 2800,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11108,
+      "tokens_per_s": 44.0,
+      "tau": 0.525,
+      "alpha": [
+        0.338,
+        0.133,
+        0.053
+      ],
+      "tokens_per_round": 1.532
+    },
+    {
+      "start": 2800,
+      "end": 2900,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11858,
+      "tokens_per_s": 43.0,
+      "tau": 0.49,
+      "alpha": [
+        0.321,
+        0.119,
+        0.05
+      ],
+      "tokens_per_round": 1.494
+    },
+    {
+      "start": 2900,
+      "end": 3000,
+      "domains": [
+        "chat",
+        "code",
+        "math"
+      ],
+      "requests": 100,
+      "new_tokens": 11607,
+      "tokens_per_s": 44.4,
+      "tau": 0.533,
+      "alpha": [
+        0.333,
+        0.144,
+        0.056
+      ],
+      "tokens_per_round": 1.537
+    }
+  ],
+  "device_name": "NVIDIA A100-SXM4-40GB"
+}
