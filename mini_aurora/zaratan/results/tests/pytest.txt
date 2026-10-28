@@ -1,0 +1,49 @@
+..................................................F.................     [100%]
+=================================== FAILURES ===================================
+______________ test_target_forward_matches_capture_and_reference _______________
+
+setup = (<aurora.models.target.eagle3_target_model.HFTargetModel object at 0x7824522e3850>, (tensor([     0,      0,      0,  ...,
+          729,   311,  8253,   279,  3728,   315,   279,  1376],
+       device='cuda:0'), seconds=1.944349840999962))
+
+    def test_target_forward_matches_capture_and_reference(setup):
+        target, _, prompt, ref = setup
+        full = target_forward(target, prompt)
+        features = capture_features(target, prompt)
+>       assert torch.equal(full.aux_hidden, features.hidden_states)
+E       AssertionError: assert False
+E        +  where False = <built-in method equal of type object at 0x7825b44e4000>(tensor([[[-3.1379e-01,  2.1141e-02, -1.4919e+00,  ..., -8.7417e-01,\n          -3.9831e+00, -4.2866e+00],\n         [-1....     [ 7.2742e-01,  3.3127e-01,  1.8285e-01,  ...,  2.7406e+00,\n           1.7976e+00,  2.9735e+00]]], device='cuda:0'), tensor([[[-3.1379e-01,  2.1141e-02, -1.4919e+00,  ..., -8.7417e-01,\n          -3.9831e+00, -4.2866e+00],\n         [-1....     [ 7.2742e-01,  3.3127e-01,  1.8285e-01,  ...,  2.7406e+00,\n           1.7976e+00,  2.9735e+00]]], device='cuda:0'))
+E        +    where <built-in method equal of type object at 0x7825b44e4000> = torch.equal
+E        +    and   tensor([[[-3.1379e-01,  2.1141e-02, -1.4919e+00,  ..., -8.7417e-01,\n          -3.9831e+00, -4.2866e+00],\n         [-1....     [ 7.2742e-01,  3.3127e-01,  1.8285e-01,  ...,  2.7406e+00,\n           1.7976e+00,  2.9735e+00]]], device='cuda:0') = TargetStep(logits=tensor([[[ 3.6899,  3.8582,  3.7428,  ...,  1.7097,  1.7097,  1.7097],\n         [ 7.3151,  8.3569,  ...   [ -2.0834,  14.1580,  -1.2065,  ...,   3.1813,   0.5508,   0.0858]]],\n       device='cuda:0'), past_key_values=None).aux_hidden
+E        +    and   tensor([[[-3.1379e-01,  2.1141e-02, -1.4919e+00,  ..., -8.7417e-01,\n          -3.9831e+00, -4.2866e+00],\n         [-1....     [ 7.2742e-01,  3.3127e-01,  1.8285e-01,  ...,  2.7406e+00,\n           1.7976e+00,  2.9735e+00]]], device='cuda:0') = Eagle3TargetOutput(hidden_states=tensor([[[-3.1379e-01,  2.1141e-02, -1.4919e+00,  ..., -8.7417e-01,\n          -3.9831...     [1],\n         [1],\n         [1],\n         [1],\n         [1],\n         [1]]], device='cuda:0'), input_ids_cpu=None).hidden_states
+
+mini_aurora/tests/test_server.py:53: AssertionError
+=============================== warnings summary ===============================
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:64
+  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:64: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+    prop = Group((name + Suppress("=") + comma_separated(value)) | oneOf(_CONSTANTS))
+
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85
+  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+    parse = parser.parseString(pattern)
+
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89
+  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+    parser.resetCache()
+
+../../usr/local/lib/python3.13/dist-packages/matplotlib/_mathtext.py:45
+  /usr/local/lib/python3.13/dist-packages/matplotlib/_mathtext.py:45: PyparsingDeprecationWarning: 'enablePackrat' deprecated - use 'enable_packrat'
+    ParserElement.enablePackrat()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1 failed, 67 passed, 14 warnings in 422.74s (0:07:02)

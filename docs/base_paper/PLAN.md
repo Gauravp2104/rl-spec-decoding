@@ -162,6 +162,12 @@ Results table + plots go back into this document.
 ### BP-09 — (Optional) CUDA portability / scale check (`bp/09-cuda-scale-check`)
 - Same `mini_aurora` code on Colab/cluster CUDA with Qwen3-1.7B/4B and FlexAttention re-enabled.
 - If 3 CUDA GPUs are available, run Aurora's `examples/qwen3-4b-external-*` once to calibrate mini results against the real system.
+- **Result (2026-10-28, Kaggle T4, fp32):** test suite 68/68 on CUDA (one exact-equality test loosened to
+  `allclose` for GPU rounding); BP-04 → BP-05 with **Qwen3-1.7B** unchanged except the target and draft sizes:
+  held-out acc 0.354 / 0.292 / 0.260, **τ̄ = 0.319** (α 0.244 / 0.059 / 0.015), 100/100 lossless, 2 h 5 min on one
+  T4 (5.6 s/step vs 2.4 for 0.6B). Same τ̄ as the 0.6B draft (0.315): the static draft, not the target size, sets
+  the ceiling. Online loop on CUDA covered by BP-08 (same τ̄ on T4, A100 and a MIG slice). Zaratan job scripts
+  written but not run (MIG memory, queue wait, scratch quota). Details: `mini_aurora/zaratan/README.md`.
 
 ## 6. Hooks for the later GRPO project
 - Reward = per-step accepted length (BP-05 logs).
