@@ -66,12 +66,14 @@ def push_source(user: str, chat_jsonl: Path | None = None, tag: str = "") -> str
     return slug
 
 
-def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None, serve: bool, tag: str = "") -> str:
+def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None, serve: bool, tag: str = "",
+                batch: int = 2, accum: int = 4) -> str:
     kid = f"{user}/{KERNEL}{tag}"
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         script = (HERE / "run_bp04.py").read_text()
-        env = {"BP04_EPOCHS": str(epochs), "BP04_DTYPE": dtype, "BP04_GRAD_CKPT": "1" if grad_ckpt else "0", "BP04_LIMIT": str(limit or ""), "BP04_SERVE": "1" if serve else "0"}
+        env = {"BP04_EPOCHS": str(epochs), "BP04_DTYPE": dtype, "BP04_GRAD_CKPT": "1" if grad_ckpt else "0", "BP04_LIMIT": str(limit or ""), "BP04_SERVE": "1" if serve else "0",
+               "BP04_BATCH": str(batch), "BP04_ACCUM": str(accum)}
         header = "import os\n" + "".join(f"os.environ[{k!r}] = {v!r}\n" for k, v in env.items())
         (d / "run_bp04.py").write_text(header + script)
         (d / "kernel-metadata.json").write_text(json.dumps({
@@ -128,11 +130,13 @@ def main() -> None:
     ap.add_argument("--no-serve", action="store_true", help="skip BP-05's held-out τ̄ check after training")
     ap.add_argument("--chat-jsonl", default=None, help="train on this chat pool instead of data/raw/chat.jsonl (e.g. data_10k/chat_9k.jsonl)")
     ap.add_argument("--tag", default="", help="suffix for the dataset and kernel names, e.g. -9k (keeps the default runs untouched)")
+    ap.add_argument("--batch-size", type=int, default=2, help="micro-batch (effective batch = batch-size x accumulation)")
+    ap.add_argument("--accumulation", type=int, default=4)
     a = ap.parse_args()
     kid = f"{a.user}/{KERNEL}{a.tag}"
     if not a.pull_only:
         slug = push_source(a.user, Path(a.chat_jsonl) if a.chat_jsonl else None, a.tag)
-        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit, not a.no_serve, a.tag)
+        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit, not a.no_serve, a.tag, a.batch_size, a.accumulation)
         print("final:", wait(kid))
     pull(kid, a.label or f"{a.dtype}{'' if a.no_grad_ckpt else '_ckpt'}_{a.epochs}ep{'_limit' + str(a.limit) if a.limit else ''}")
 
