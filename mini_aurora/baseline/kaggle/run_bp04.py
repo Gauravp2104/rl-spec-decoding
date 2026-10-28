@@ -56,6 +56,7 @@ def main() -> None:
         shutil.rmtree(REPO)
     shutil.copytree(src, REPO, ignore=shutil.ignore_patterns("__pycache__", "*.egg-info"))
     OUT.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["df", "-h", "/tmp", str(WORK)])  # the feature dump lives under /tmp/repo (~8 KB per token)
     timings = {}
 
     timings["install_s"] = run([sys.executable, "-m", "pip", "install", "-q", "transformers==4.57.1", "omegaconf",

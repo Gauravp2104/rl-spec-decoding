@@ -40,8 +40,8 @@ def kaggle(*args: str, check: bool = True) -> str:
     return r.stdout + r.stderr
 
 
-def push_source(user: str) -> str:
-    slug = f"{user}/{DATASET}"
+def push_source(user: str, chat_jsonl: Path | None = None, tag: str = "") -> str:
+    slug = f"{user}/{DATASET}{tag}"
     ignore = shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info")
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
@@ -52,13 +52,13 @@ def push_source(user: str) -> str:
             shutil.copy(ROOT / "aurora-main" / f, d / "aurora-main" / f)
         shutil.copy(ROOT / "pyproject.toml", d / "pyproject.toml")
         (d / "data" / "raw").mkdir(parents=True)
-        shutil.copy(ROOT / "data" / "raw" / "chat.jsonl", d / "data" / "raw" / "chat.jsonl")
+        shutil.copy(chat_jsonl or ROOT / "data" / "raw" / "chat.jsonl", d / "data" / "raw" / "chat.jsonl")
         (d / "data" / "streams").mkdir()
         for f in (ROOT / "data" / "streams").glob("*.jsonl"):
             shutil.copy(f, d / "data" / "streams" / f.name)
         shutil.copytree(ROOT / "outputs" / "vocab", d / "outputs" / "vocab")
-        (d / "dataset-metadata.json").write_text(json.dumps({"title": DATASET, "id": slug, "licenses": [{"name": "CC0-1.0"}]}))
-        exists = DATASET in kaggle("datasets", "list", "--mine", check=False)
+        (d / "dataset-metadata.json").write_text(json.dumps({"title": DATASET + tag, "id": slug, "licenses": [{"name": "CC0-1.0"}]}))
+        exists = slug in kaggle("datasets", "list", "--mine", check=False)
         out = kaggle("datasets", "version" if exists else "create", "-p", str(d), *(["-m", "update"] if exists else []),
                      "--dir-mode", "zip", check=False)
         print(out.strip().splitlines()[-1])
@@ -66,8 +66,8 @@ def push_source(user: str) -> str:
     return slug
 
 
-def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None, serve: bool) -> str:
-    kid = f"{user}/{KERNEL}"
+def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None, serve: bool, tag: str = "") -> str:
+    kid = f"{user}/{KERNEL}{tag}"
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         script = (HERE / "run_bp04.py").read_text()
@@ -75,7 +75,7 @@ def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bo
         header = "import os\n" + "".join(f"os.environ[{k!r}] = {v!r}\n" for k, v in env.items())
         (d / "run_bp04.py").write_text(header + script)
         (d / "kernel-metadata.json").write_text(json.dumps({
-            "id": kid, "title": KERNEL, "code_file": "run_bp04.py", "language": "python", "kernel_type": "script",
+            "id": kid, "title": KERNEL + tag, "code_file": "run_bp04.py", "language": "python", "kernel_type": "script",
             "is_private": True, "enable_gpu": True, "enable_internet": True,
             "dataset_sources": [src_slug], "competition_sources": [], "kernel_sources": []}))
         print(kaggle("kernels", "push", "-p", str(d)).strip().splitlines()[-1])
@@ -126,11 +126,13 @@ def main() -> None:
     ap.add_argument("--pull-only", action="store_true")
     ap.add_argument("--label", default=None, help="output folder under outputs/baseline/kaggle/")
     ap.add_argument("--no-serve", action="store_true", help="skip BP-05's held-out τ̄ check after training")
+    ap.add_argument("--chat-jsonl", default=None, help="train on this chat pool instead of data/raw/chat.jsonl (e.g. data_10k/chat_9k.jsonl)")
+    ap.add_argument("--tag", default="", help="suffix for the dataset and kernel names, e.g. -9k (keeps the default runs untouched)")
     a = ap.parse_args()
-    kid = f"{a.user}/{KERNEL}"
+    kid = f"{a.user}/{KERNEL}{a.tag}"
     if not a.pull_only:
-        slug = push_source(a.user)
-        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit, not a.no_serve)
+        slug = push_source(a.user, Path(a.chat_jsonl) if a.chat_jsonl else None, a.tag)
+        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit, not a.no_serve, a.tag)
         print("final:", wait(kid))
     pull(kid, a.label or f"{a.dtype}{'' if a.no_grad_ckpt else '_ckpt'}_{a.epochs}ep{'_limit' + str(a.limit) if a.limit else ''}")
 
