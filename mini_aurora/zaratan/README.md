@@ -61,8 +61,8 @@ forward paths round differently in fp32 (identical on CPU and MPS). Fixed by com
 
 ### Qwen3-1.7B scale check (Kaggle T4, fp32, 2026-10-28)
 
-BP-04's recipe unchanged (chat pool, 900 train / 100 held-out conversations, 24K vocab, aux layers 1/13/24,
-8 epochs = 896 steps, fp32 weights + gradient checkpointing), then BP-05's held-out τ̄ with K = 3 and `--check`.
+The BP-04 training run (same chat pool, 24K vocab, aux layers 1/13/24, 8 epochs, fp32 weights with gradient
+checkpointing) with Qwen3-1.7B as the target, followed by BP-05's held-out τ̄ measurement (K = 3, lossless check on).
 Smoke first (20 conversations, 1 epoch: dump 84 s, train 32 s, evaluate 20 s), then the full run.
 
 | target | draft hidden / intermediate | held-out acc (1/2/3) | τ̄ | α1 / α2 / α3 | tok/s | lossless | dump / train / serve | s/step |
@@ -70,8 +70,8 @@ Smoke first (20 conversations, 1 epoch: dump 84 s, train 32 s, evaluate 20 s), t
 | Qwen3-0.6B (BP-04) | 1024 / 3072 | 0.311 / 0.271 / 0.248 | 0.315 | 0.243 / 0.058 / 0.014 | 23.2 | 100/100 | 418 / 2148 / 934 s | 2.4 |
 | Qwen3-1.7B (BP-09) | 2048 / 6144 | 0.354 / 0.292 / 0.260 | **0.319** | 0.244 / 0.059 / 0.015 | 12.0 | 100/100 | 965 / 4976 / 1529 s | 5.6 |
 
-- The same code, config and step count train a draft for a 3× larger target with no change; the whole job is
-  one T4 kernel of 2 h 5 min.
+- The same code trains a draft for a 3× larger target without changes; the whole job is one T4 kernel of
+  about 2 hours.
 - The 1.7B draft predicts its target's next token better (acc 0.35 vs 0.31) but serves the same τ̄ (0.32): the
   acceptance ceiling comes from the static draft and K = 3, not from the target size. Files: `results/1p7b/`.
 - tok/s halves with the bigger target (every verification pass is a 1.7B forward); not compared to target-only here.
