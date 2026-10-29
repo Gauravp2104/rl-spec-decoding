@@ -135,3 +135,19 @@ python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/che
 - Serving is still **slower** than the target alone (×0.59): a round takes ~41 ms (~2.3 target-only steps of
   18 ms) but yields 1.32 tokens. Breaking even needs τ̄ ≈ 1.3 at this round cost, and the static draft won't get
   there on its own; online training (BP-06) and a cheaper round (draft KV cache) are the levers.
+
+### More training data: 9K / 15K / 27K chat conversations (PR #33)
+
+Same trainer, vocab and 100 held-out conversations; the training pool is built by `mini_aurora/data/extend_pool.py`
+(bigger seeded BP-02 download, the 1K pool rows dropped, so every stream conversation is outside the training set).
+Kaggle T4, fp32 + gradient checkpointing. τ̄ is BP-05's loop on the 100 held-out chat requests, K = 3, greedy.
+
+| train conversations | epochs | held-out acc (pos 1 / 2 / 3) | τ̄ | α1 / α2 / α3 | lossless | files |
+|---|---|---|---|---|---|---|
+| 900 (`bp04-static-v1`) | 8 | 0.311 / 0.271 / 0.248 | 0.315 | 0.243 / 0.058 / 0.014 | 100/100 | above |
+| 9,000 | 8 | 0.516 / 0.451 / 0.417 | 0.623 | 0.401 / 0.159 / 0.063 | 100/100 | `results/kaggle_9k/` |
+| 15,000 | 2 | running | | | | |
+| 27,475 (all filtered ShareGPT) | | depends on the 15K result; needs Zaratan (dump is 114 GB, over Kaggle's disk limit) | | | | |
+
+9K timings: dump 58 min (4.67M tokens), train 6.1 h (9,000 steps), serve 15 min. Held-out accuracy was still
+rising at epoch 7 (0.512 → 0.515), so the 9K draft is close to converged on this data.
