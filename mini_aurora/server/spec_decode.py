@@ -30,6 +30,7 @@ from mini_aurora.models.target import _sync
 from mini_aurora.server.drafter import Drafter
 from mini_aurora.server.reference import eos_token_ids
 from mini_aurora.server.target_step import target_forward
+from mini_aurora.server.tree import cache_keep, tree_attention_mask, tree_position_ids, walk_greedy
 from mini_aurora.server.verify import sample_token, verify_greedy, verify_sampling
 
 from aurora.models.target.eagle3_target_model import Eagle3TargetOutput, HFTargetModel  # noqa: I001
@@ -71,9 +72,17 @@ def speculative_generate(
     use_cache: bool = True,
     generator: torch.Generator | None = None,
     return_sample: bool = False,
+    tree_topk: int = 1,
+    tree_beam: int = 1,
 ) -> SpecOutput:
-    """Generate after ``input_ids`` (1, n). Greedy output equals ``reference_generate`` token for token."""
+    """Generate after ``input_ids`` (1, n). Greedy output equals ``reference_generate`` token for token.
+
+    ``tree_topk > 1`` drafts a tree (``tree_beam`` nodes per depth, depth ``k``) instead of a chain; greedy only.
+    """
     k = k or drafter.k
+    tree = tree_topk > 1 or tree_beam > 1
+    if tree and not greedy:
+        raise NotImplementedError("tree drafting is implemented for greedy verification only")
     eos = eos_token_ids(target)
     draft_to_target = drafter.to_target_ids(torch.arange(drafter.draft.lm_head.out_features, device=input_ids.device))
     start = time.perf_counter()
@@ -84,6 +93,35 @@ def speculative_generate(
     out, accepted, versions = [int(next_token)], [], []
 
     while len(out) < max_new_tokens and out[-1] not in eos:
+        if tree:
+            proposal = drafter.propose_tree(context, aux, next_token, k=k, topk=tree_topk, beam=tree_beam)
+            verify_ids = torch.cat([next_token.view(1, 1), proposal.tokens.view(1, -1)], dim=1)
+            n, size = context.shape[1], verify_ids.shape[1]
+            positions = tree_position_ids(proposal.depth, n)
+            if use_cache:
+                mask = tree_attention_mask(proposal.parent, n, target.model.dtype)
+                step = target_forward(target, verify_ids, cache, attention_mask=mask, position_ids=positions)
+            else:
+                mask = tree_attention_mask(proposal.parent, n, target.model.dtype, prefix_rows=True)
+                full_positions = torch.cat([torch.arange(n, device=input_ids.device)[None], positions], dim=1)
+                step = target_forward(target, torch.cat([context, verify_ids], dim=1), num_logits=size,
+                                      attention_mask=mask, position_ids=full_positions)
+            verdict = walk_greedy(step.logits[0, -size:], proposal)
+            keep = torch.tensor(verdict.keep, device=input_ids.device)
+            context = torch.cat([context, verify_ids[:, keep]], dim=1)
+            aux = torch.cat([aux, step.aux_hidden[:, -size:][:, keep]], dim=1)
+            last = torch.cat([last, step.last_hidden[:, -size:][:, keep]], dim=1)
+            if use_cache:
+                cache = step.past_key_values
+                cache_keep(cache, n, verdict.keep)
+            next_token = verdict.tokens[-1]
+            accepted.append(verdict.accepted)
+            versions.append(drafter.version)
+            for token in verdict.tokens.tolist():
+                out.append(token)
+                if token in eos or len(out) == max_new_tokens:
+                    break
+            continue
         proposal = drafter.propose(
             context, aux, next_token, k=k, greedy=greedy, temperature=temperature, generator=generator
         )

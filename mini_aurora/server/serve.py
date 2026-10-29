@@ -69,6 +69,8 @@ def serve(
     log: RequestLog | None = None,
     on_sample: Callable | None = None,
     verbose: bool = False,
+    tree_topk: int = 1,
+    tree_beam: int = 1,
 ) -> list[dict]:
     """Serve ``rows`` one at a time (bs = 1); returns one log record per request.
 
@@ -92,6 +94,8 @@ def serve(
             use_cache=use_cache,
             generator=generator,
             return_sample=on_sample is not None,
+            tree_topk=tree_topk,
+            tree_beam=tree_beam,
         )
         extra = {"domain": row.get("domain"), "pos": row.get("pos")}
         if check:
@@ -142,7 +146,9 @@ def main() -> None:
     parser.add_argument("--heldout", action="store_true", help="only chat requests BP-04 never trained on")
     parser.add_argument("--draft", default=None, help="BP-04 checkpoint file or directory (default: day-0 draft)")
     parser.add_argument("--vocab", default=DEFAULT_VOCAB)
-    parser.add_argument("-k", type=int, default=3, help="guesses per round")
+    parser.add_argument("-k", type=int, default=3, help="guesses per round (tree: depth)")
+    parser.add_argument("--tree-topk", type=int, default=1, help="children per node; > 1 drafts a tree instead of a chain")
+    parser.add_argument("--tree-beam", type=int, default=1, help="nodes kept per depth (tree)")
     parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument("--sampling", action="store_true", help="speculative sampling instead of greedy")
     parser.add_argument("--temperature", type=float, default=1.0)
@@ -180,6 +186,8 @@ def main() -> None:
             check=args.check,
             log=log,
             verbose=True,
+            tree_topk=args.tree_topk,
+            tree_beam=max(args.tree_beam, args.tree_topk),
         )
     finally:
         if log is not None:

@@ -14,7 +14,9 @@ the Qwen3-0.6B download. Everything worth keeping lands in ``/kaggle/working/bp0
     timings.json         wall-clock per stage
 
 Knobs via environment variables (set by push.py): BP04_EPOCHS (8), BP04_DTYPE (fp32/bf16), BP04_GRAD_CKPT (1/0), BP04_LIMIT (all),
-BP04_HELDOUT (100), BP04_BATCH (2), BP04_ACCUM (4), BP04_SERVE (1).
+BP04_HELDOUT (100), BP04_BATCH (2), BP04_ACCUM (4), BP04_SERVE (1), BP04_K (3),
+BP04_SERVE_ONLY (0: with 1, skip dump/train and serve the checkpoint of the attached kernel output at BP04_K),
+BP04_TREE_TOPK (1) / BP04_TREE_BEAM (1): tree drafting in the serve step.
 """
 
 import json
@@ -50,6 +52,34 @@ def run(cmd: list[str], tee: Path | None = None, **env) -> float:
     return round(time.perf_counter() - t0, 1)
 
 
+def serve(k: str, heldout: str, common_env: dict) -> float:
+    """BP-05's loop on the held-out chat requests with the trained draft; K guesses per round."""
+    cmd = [sys.executable, "-m", "mini_aurora.server.serve", "-n", heldout, "--heldout", "--check", "-k", k,
+           "--draft", "outputs/baseline/checkpoints", "--log", "outputs/server/heldout.jsonl"]
+    if os.environ.get("BP04_TREE_TOPK", "1") != "1":
+        cmd += ["--tree-topk", os.environ["BP04_TREE_TOPK"], "--tree-beam", os.environ.get("BP04_TREE_BEAM", "1")]
+    seconds = run(cmd, tee=OUT / "serve_heldout.txt", **common_env)
+    shutil.copy(REPO / "outputs" / "server" / "heldout.jsonl", OUT / "serve_heldout.jsonl")
+    return seconds
+
+
+def serve_only(k: str, heldout: str, timings: dict, common_env: dict) -> None:
+    """No dump / train: copy the checkpoint from the attached kernel output and serve it at K = ``k``."""
+    latest = next(Path("/kaggle/input").rglob("bp04/latest.txt"), None)
+    if latest is None:
+        raise SystemExit("no finished BP-04 kernel attached as a kernel source")
+    ckpt = REPO / "outputs" / "baseline" / "checkpoints"
+    ckpt.mkdir(parents=True)
+    step = int(latest.read_text().strip())
+    for name in ("latest.txt", f"draft_step{step:06d}.pt", f"draft_step{step:06d}.json"):
+        shutil.copy(latest.parent / name, ckpt / name)
+    timings["serve_s"] = serve(k, heldout, common_env)
+    timings.update(k=int(k), tree_topk=int(os.environ.get("BP04_TREE_TOPK", "1")), tree_beam=int(os.environ.get("BP04_TREE_BEAM", "1")),
+                   checkpoint=str(latest.parent), step=step)
+    (OUT / "timings.json").write_text(json.dumps(timings, indent=2))
+    print(json.dumps(timings, indent=2))
+
+
 def main() -> None:
     src = find_source()
     if REPO.exists():
@@ -67,7 +97,12 @@ def main() -> None:
     epochs = os.environ.get("BP04_EPOCHS", "8")
     limit = os.environ.get("BP04_LIMIT", "")
     heldout = os.environ.get("BP04_HELDOUT", "100")
+    k = os.environ.get("BP04_K", "3")
     common_env = {"MINI_AURORA_DEVICE": "cuda", "WANDB_MODE": "offline", "HF_HOME": "/tmp/hf"}
+
+    if os.environ.get("BP04_SERVE_ONLY", "0") == "1":  # re-serve a finished kernel's checkpoint (attached as a kernel source)
+        serve_only(k, heldout, timings, common_env)
+        return
 
     dump = [sys.executable, "-m", "mini_aurora.baseline.dump", "--jsonl", "data/raw/chat.jsonl", "--heldout", heldout]
     if limit:
@@ -84,10 +119,7 @@ def main() -> None:
     timings["evaluate_s"] = run([sys.executable, "-m", "mini_aurora.baseline.evaluate", "--out", "outputs/baseline/evaluate.json"], **common_env)
 
     if os.environ.get("BP04_SERVE", "1") == "1" and not limit:
-        timings["serve_s"] = run([sys.executable, "-m", "mini_aurora.server.serve", "-n", heldout, "--heldout", "--check",
-                                  "--draft", "outputs/baseline/checkpoints", "--log", "outputs/server/heldout.jsonl"],
-                                 tee=OUT / "serve_heldout.txt", **common_env)
-        shutil.copy(REPO / "outputs" / "server" / "heldout.jsonl", OUT / "serve_heldout.jsonl")
+        timings["serve_s"] = serve(k, heldout, common_env)
 
     base = REPO / "outputs" / "baseline"
     shutil.copy(base / "hidden_states" / "manifest.json", OUT / "manifest.json")
