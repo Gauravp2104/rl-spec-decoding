@@ -1,0 +1,62 @@
+{
+  "config": {
+    "dump_dir": "outputs/baseline/hidden_states",
+    "vocab": "outputs/vocab/qwen3_24k_mixed.pt",
+    "epochs": 2,
+    "lr": 0.0001,
+    "batch_size": 4,
+    "accumulation": 2,
+    "warmup_ratio": 0.015,
+    "max_grad_norm": 0.5,
+    "draft_dtype": "float32",
+    "gradient_checkpointing": true,
+    "device": "cuda",
+    "seed": 0,
+    "limit": null,
+    "train_conversations": 15000,
+    "steps_per_epoch": 1875,
+    "total_steps": 3750,
+    "trainable_params": 42405888,
+    "frozen_params": 155582464
+  },
+  "epochs": [
+    {
+      "epoch": 0,
+      "step": 1875,
+      "elapsed_s": 4090.8,
+      "heldout": {
+        "loss": [
+          3.716538111489359,
+          4.054105112643625,
+          4.272310059111056
+        ],
+        "acc": [
+          0.419036902445841,
+          0.36581881996511023,
+          0.33256741660631733
+        ],
+        "assistant_tokens": 41535,
+        "batches": 25
+      }
+    },
+    {
+      "epoch": 1,
+      "step": 3750,
+      "elapsed_s": 8184.1,
+      "heldout": {
+        "loss": [
+          3.495347021621129,
+          3.832816345510578,
+          4.052924732612591
+        ],
+        "acc": [
+          0.44516025463051206,
+          0.3928563434817637,
+          0.3561180905076274
+        ],
+        "assistant_tokens": 41535,
+        "batches": 25
+      }
+    }
+  ]
+}
