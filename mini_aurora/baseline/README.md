@@ -147,8 +147,8 @@ Kaggle T4, fp32 + gradient checkpointing. τ̄ is BP-05's loop on the 100 held-o
 | 900 (`bp04-static-v1`) | 8 | 0.311 / 0.271 / 0.248 | 0.315 | 0.243 / 0.058 / 0.014 | 100/100 | above |
 | 9,000 | 8 | 0.516 / 0.451 / 0.417 | 0.623 | 0.401 / 0.159 / 0.063 | 100/100 | `results/kaggle_9k/` |
 | 15,000 | 2 | 0.445 / 0.393 / 0.356 | 0.503 | 0.342 / 0.119 / 0.042 | 100/100 | `results/kaggle_15k_2ep/` |
-| 15,000 | 8 | next | | | | |
-| 27,475 (all filtered ShareGPT) | 8 | needs Zaratan (dump is 114 GB, over Kaggle's disk limit) | | | | |
+| 15,000 | 8 | pending | | | | |
+| 27,475 (all filtered ShareGPT) | 8 | pending; needs Zaratan (dump is 114 GB, over Kaggle's disk limit) | | | | |
 
 The 2-epoch 15K run is not a data-scaling point: its cosine schedule decays to zero over 3,750 steps, and it ends
 below the 9K run's epoch-2 checkpoint (0.468). Only 8-epoch runs are comparable with each other.
