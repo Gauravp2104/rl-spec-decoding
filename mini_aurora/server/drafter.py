@@ -26,6 +26,7 @@ from pathlib import Path
 import torch
 
 from mini_aurora.baseline.checkpoint import latest_checkpoint
+from mini_aurora.server.tree import DraftTree
 
 from aurora.models.draft.base import Eagle3DraftModel  # noqa: I001
 
@@ -155,6 +156,80 @@ class Drafter:
 
         draft_ids = torch.stack(draft_ids)
         return DraftProposal(self.to_target_ids(draft_ids), draft_ids, torch.stack(probs))
+
+
+    @torch.no_grad()
+    def propose_tree(
+        self,
+        input_ids: torch.Tensor,
+        aux_hidden: torch.Tensor,
+        next_token: torch.Tensor | int,
+        k: int | None = None,
+        topk: int = 2,
+        beam: int = 4,
+    ) -> DraftTree:
+        """Greedy tree of depth ``k``: each node's ``topk`` most likely children, at most ``beam`` nodes per depth.
+
+        The same backbone unroll as ``propose``, run once per depth over all live branches as a batch (each
+        branch carries its own shifted ids, hidden states and TTT cache). Branches are ranked by cumulative
+        log-probability; with ``topk = beam = 1`` the tree is exactly the chain.
+        """
+        draft, k = self.draft, k or self.k
+        n = input_ids.shape[1]
+        if aux_hidden.shape[1] != n:
+            raise ValueError(f"aux_hidden covers {aux_hidden.shape[1]} tokens, input_ids {n}")
+        if topk < 1 or beam < 1:
+            raise ValueError("topk and beam must be >= 1")
+        dtype = next(draft.fc.parameters()).dtype
+        device = input_ids.device
+        next_token = torch.as_tensor(next_token, device=device).view(1, 1)
+
+        hidden = draft.project_hidden_states(aux_hidden.to(dtype))
+        position_ids = torch.arange(n, device=device).unsqueeze(0)
+        mask = draft.prepare_decoder_attention_mask(
+            attention_mask=torch.ones_like(input_ids),
+            hidden_states=hidden,
+            batch_size=1,
+            seq_length=n,
+            past_key_values_length=0,
+        )
+        ids = torch.cat([input_ids[:, 1:], next_token], dim=1)
+        cache_keys = cache_values = None
+        score = torch.zeros(1, device=device)
+        parent = torch.zeros(1, dtype=torch.long, device=device)  # verify index of each live branch's node (root = 0)
+        tokens, draft_ids, parents, depths, scores = [], [], [], [], []
+        for d in range(1, k + 1):
+            b = ids.shape[0]
+            embeds = draft.embed_input_ids(ids.clamp(0, draft.target_vocab_size - 1)).to(dtype)
+            hidden, cache_keys, cache_values = draft.backbone(
+                input_embeds=embeds,
+                hidden_states=hidden,
+                attention_mask=mask.expand(b, -1, -1, -1),
+                position_ids=position_ids.expand(b, -1),
+                cache_keys=cache_keys,
+                cache_values=cache_values,
+                use_cache=True,
+            )
+            logq = torch.log_softmax(draft.compute_logits(hidden[:, -1]).float(), dim=-1)  # (b, V_draft)
+            top = logq.topk(min(topk, logq.shape[-1]), dim=-1)
+            cand = (score[:, None] + top.values).flatten()  # (b * topk,)
+            chosen = cand.topk(min(beam, cand.numel())).indices
+            rows, cols = chosen // top.values.shape[1], chosen % top.values.shape[1]
+            new_draft = top.indices[rows, cols]
+            new_target = self.to_target_ids(new_draft)
+            first = len(tokens)
+            tokens.extend(new_target.tolist())
+            draft_ids.extend(new_draft.tolist())
+            parents.extend(parent[rows].tolist())
+            depths.extend([d] * rows.numel())
+            scores.extend(cand[chosen].tolist())
+            # Next depth: every chosen node becomes a live branch.
+            hidden, ids = hidden[rows], torch.cat([ids[rows, 1:], new_target.view(-1, 1)], dim=1)
+            cache_keys, cache_values = cache_keys[rows], cache_values[rows]
+            score = cand[chosen]
+            parent = torch.arange(first + 1, first + 1 + rows.numel(), device=device)
+        t = lambda x, dt=torch.long: torch.tensor(x, dtype=dt, device=device)
+        return DraftTree(t(tokens), t(draft_ids), t(parents), t(depths), t(scores, torch.float32))
 
 
 def trainable_state(draft: Eagle3DraftModel) -> dict[str, torch.Tensor]:

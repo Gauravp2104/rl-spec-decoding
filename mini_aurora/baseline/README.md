@@ -135,3 +135,31 @@ python -m mini_aurora.server.serve -n 100 --heldout --draft outputs/baseline/che
 - Serving is still **slower** than the target alone (×0.59): a round takes ~41 ms (~2.3 target-only steps of
   18 ms) but yields 1.32 tokens. Breaking even needs τ̄ ≈ 1.3 at this round cost, and the static draft won't get
   there on its own; online training (BP-06) and a cheaper round (draft KV cache) are the levers.
+
+### More training data: 9K / 15K / 27K chat conversations (PR #33)
+
+Same trainer, vocab and 100 held-out conversations; the training pool is built by `mini_aurora/data/extend_pool.py`
+(bigger seeded BP-02 download, the 1K pool rows dropped, so every stream conversation is outside the training set).
+Kaggle T4, fp32 + gradient checkpointing. τ̄ is BP-05's loop on the 100 held-out chat requests, K = 3, greedy.
+
+| train conversations | epochs | held-out acc (pos 1 / 2 / 3) | τ̄ | α1 / α2 / α3 | lossless | files |
+|---|---|---|---|---|---|---|
+| 900 (`bp04-static-v1`) | 8 | 0.311 / 0.271 / 0.248 | 0.315 | 0.243 / 0.058 / 0.014 | 100/100 | above |
+| 9,000 | 8 | 0.516 / 0.451 / 0.417 | 0.623 | 0.401 / 0.159 / 0.063 | 100/100 | `results/kaggle_9k/` |
+| 15,000 | 2 | 0.445 / 0.393 / 0.356 | 0.503 | 0.342 / 0.119 / 0.042 | 100/100 | `results/kaggle_15k_2ep/` |
+| 15,000 | 6 | 0.539 / 0.477 / 0.437 | **0.671** | 0.421 / 0.174 / 0.076 | 100/100 | `results/kaggle_15k_6ep/` |
+| 15,000 | 8 | 0.564 / 0.502 / 0.459 | ≈ 0.70 (est.) | | | killed at Kaggle's 12 h limit during the serve; checkpoint lost |
+| 27,475 (all filtered ShareGPT) | 8 | ≈ 0.60 (est.) | ≈ 0.74 (est.) | | | not run; needs Zaratan (dump is 114 GB, over Kaggle's disk limit) |
+
+The 2-epoch 15K run is not a data-scaling point: its cosine schedule decays to zero over 3,750 steps, and it ends
+below the 9K run's epoch-2 checkpoint (0.468). The 8-epoch 15K run trained to the end (11 h 50 min) and was killed by
+Kaggle's 12 h limit 9 minutes into the held-out serve, so only its teacher-forced accuracy survives; its τ̄ is
+estimated from the 9K and 15K/6 accuracy-to-τ̄ ratio (≈ 1.23). The 6-epoch rerun fits in 9.3 h (dump 1.5 h, train
+6.9 h, serve 14 min) but the compressed schedule gives back about half of the 15K gain (0.539 vs 0.564 at position 1).
+
+Scaling: position-1 accuracy went 0.311 → 0.516 → 0.564 for 900 → 9K → 15K conversations at 8 epochs, roughly linear
+in log(data). Extrapolating, 27K would reach about 0.60 / τ̄ 0.74 for ~280 SU on Zaratan, so it is left for after the
+training-recipe changes.
+
+9K timings: dump 58 min (4.67M tokens), train 6.1 h (9,000 steps), serve 15 min. Held-out accuracy was still
+rising at epoch 7 (0.512 → 0.515), so the 9K draft is close to converged on this data.

@@ -21,6 +21,7 @@ from mini_aurora.server.reference import encode_prompt, eos_token_ids, reference
 from mini_aurora.server.serve import DEFAULT_STREAM, heldout_ids, load_requests, serve, summarize
 from mini_aurora.server.spec_decode import speculative_generate
 from mini_aurora.server.target_step import target_forward
+from mini_aurora.server.tree import DraftTree, cache_keep, tree_attention_mask, tree_position_ids, walk_greedy
 from mini_aurora.server.verify import verify_greedy, verify_sampling
 
 pytestmark = pytest.mark.skipif(
@@ -293,3 +294,90 @@ def test_serve_50_prompts_lossless(setup, trained):
     assert all(r["match"] for r in records), [r["request_id"] for r in records if not r["match"]]
     assert summary["all"]["matches"] == "50/50" and len(samples) == 50
     assert {"chat", "code", "math"} <= set(summary)
+
+
+# --- tree drafting (top-k > 1) -------------------------------------------------------------------------------
+
+
+def _toy_tree():
+    """Root x_n with children A (node 0) and B (node 1); A has children C (2) and D (3); B has child E (4)."""
+    return DraftTree(
+        tokens=torch.tensor([10, 11, 20, 21, 30]),
+        draft_ids=torch.tensor([10, 11, 20, 21, 30]),
+        parent=torch.tensor([0, 0, 1, 1, 2]),
+        depth=torch.tensor([1, 1, 2, 2, 2]),
+        score=torch.zeros(5),
+    )
+
+
+def test_tree_mask_and_positions():
+    tree = _toy_tree()
+    mask = tree_attention_mask(tree.parent, past=3, dtype=torch.float32)
+    assert mask.shape == (1, 1, 6, 9)
+    allowed = mask[0, 0] == 0
+    assert allowed[:, :3].all()  # every tree position sees the whole context
+    # verify positions: 0 root, 1 A, 2 B, 3 C, 4 D, 5 E (offset by the 3 context slots)
+    assert allowed[4, 3:].tolist() == [True, True, False, False, True, False]  # D: root, A, itself
+    assert allowed[5, 3:].tolist() == [True, False, True, False, False, True]  # E: root, B, itself
+    assert allowed[0, 3:].tolist() == [True, False, False, False, False, False]
+    full = tree_attention_mask(tree.parent, past=3, dtype=torch.float32, prefix_rows=True)
+    assert full.shape == (1, 1, 9, 9)
+    assert (full[0, 0, :3, :3] == 0).tril().sum() == 6 and (full[0, 0, :3, 3:] != 0).all()
+    assert torch.equal(full[0, 0, 3:], mask[0, 0])
+    assert tree_position_ids(tree.depth, 3).tolist() == [[3, 4, 4, 5, 5, 5]]
+
+
+def test_walk_greedy_toy():
+    tree = _toy_tree()
+    logits = torch.full((6, 100), -1.0)
+    for row, token in enumerate([11, 99, 30, 99, 99, 7]):  # root → B, A → nothing, B → E, ..., E → 7
+        logits[row, token] = 1.0
+    v = walk_greedy(logits, tree)
+    assert (v.accepted, v.keep, v.tokens.tolist()) == (2, [0, 2, 5], [11, 30, 7])
+    logits[0, 11], logits[0, 5] = -1.0, 1.0  # root's argmax is not a child: nothing accepted, extra = 5
+    v = walk_greedy(logits, tree)
+    assert (v.accepted, v.keep, v.tokens.tolist()) == (0, [0], [5])
+
+
+def test_cache_keep():
+    cache = DynamicCache()
+    keys = torch.arange(9.0).view(1, 1, 9, 1)
+    cache.update(keys, keys * 10, 0)
+    cache_keep(cache, past=3, keep=[0, 2, 5])
+    kept = cache.layers[0].keys if hasattr(cache, "layers") else cache.key_cache[0]
+    assert kept.flatten().tolist() == [0, 1, 2, 3, 5, 8]
+    assert cache.get_seq_length() == 6
+
+
+def test_propose_tree_topk1_is_the_chain(setup, trained):
+    target, _, prompt, ref = setup
+    drafter = Drafter(trained[0], k=3)
+    aux = target_forward(target, prompt).aux_hidden
+    chain = drafter.propose(prompt, aux, ref.new_ids[0])
+    tree = drafter.propose_tree(prompt, aux, ref.new_ids[0], topk=1, beam=1)
+    assert torch.equal(tree.tokens, chain.tokens) and tree.parent.tolist() == [0, 1, 2] and tree.depth.tolist() == [1, 2, 3]
+    wide = drafter.propose_tree(prompt, aux, ref.new_ids[0], k=3, topk=2, beam=3)
+    assert wide.size == 2 + 3 + 3 and wide.depth.tolist() == [1, 1, 2, 2, 2, 3, 3, 3]
+    assert (wide.parent[2:5] <= 2).all() and (wide.parent[5:] >= 3).all()
+    assert torch.equal(wide.tokens[0], chain.tokens[0])  # the chain's first guess is the root's best child
+    assert drafter.draft.t2d[wide.tokens].all()
+
+
+@pytest.mark.parametrize("use_cache", [False, True], ids=["cache-free", "kv-cache"])
+def test_tree_greedy_is_lossless(setup, trained, use_cache):
+    """Tree rounds (top-k 2, beam 3, depth 3) give model.generate's tokens with a day-0 and an overfit draft."""
+    target, vocab, prompt, ref = setup
+    tokenizer = load_tokenizer()
+    day0 = Drafter(build_draft(target, vocab, dtype=torch.float32), k=3)
+    for question in PROMPTS[:2]:
+        ids = encode_prompt(tokenizer, question, target.model.device)
+        expected = reference_generate(target, ids, max_new_tokens=32).new_ids
+        out = speculative_generate(target, day0, ids, max_new_tokens=32, use_cache=use_cache, tree_topk=2, tree_beam=3)
+        assert torch.equal(out.new_ids, expected), question
+
+    chain = speculative_generate(target, Drafter(trained[0], k=3), prompt, max_new_tokens=48, use_cache=use_cache)
+    out = speculative_generate(target, Drafter(trained[0], k=3), prompt, max_new_tokens=48, use_cache=use_cache,
+                               tree_topk=2, tree_beam=3)
+    assert torch.equal(out.new_ids, ref.new_ids)
+    print(f"overfit draft, tree ({'cache' if use_cache else 'no cache'}): accepted per round {out.accepted}")
+    assert out.mean_accepted >= chain.mean_accepted  # a tree never accepts less than its own best chain

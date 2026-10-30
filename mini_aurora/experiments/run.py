@@ -110,7 +110,9 @@ def main() -> None:
     p.add_argument("-n", type=int, default=None, help="requests to serve (default: the whole stream)")
     p.add_argument("--draft", default=STATIC_DRAFT, help="BP-04 checkpoint file or directory for the static arm")
     p.add_argument("--vocab", default=DEFAULT_VOCAB)
-    p.add_argument("-k", type=int, default=3)
+    p.add_argument("-k", type=int, default=3, help="guesses per round (tree: depth)")
+    p.add_argument("--tree-topk", type=int, default=1, help="static arm: children per node; > 1 drafts a tree")
+    p.add_argument("--tree-beam", type=int, default=1, help="static arm: nodes kept per depth (tree)")
     p.add_argument("--max-new-tokens", type=int, default=128)
     p.add_argument("--check", action="store_true", help="also decode target-only and record losslessness")
     p.add_argument("--tag", default=None, help="suffix for the output directory")
@@ -155,8 +157,11 @@ def main() -> None:
                 if args.arm == "static":
                     meta["draft"] = str(drafter.load_file(args.draft))
                     meta["draft_version"] = drafter.version
+                tree = {"tree_topk": args.tree_topk, "tree_beam": max(args.tree_beam, args.tree_topk)}
+                if args.tree_topk > 1:
+                    meta.update(tree)
                 records = serve(target, drafter, tokenizer, rows, max_new_tokens=args.max_new_tokens,
-                                check=args.check, log=log, verbose=False)
+                                check=args.check, log=log, verbose=False, **tree)
     summary = {**meta, "elapsed_s": round(time.perf_counter() - t0, 1), **summarize(records)}
     (out / "summary.json").write_text(json.dumps(summary, indent=2))
     print(json.dumps({k: summary[k] for k in ("overall", "by_domain")}, indent=2))

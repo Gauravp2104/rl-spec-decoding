@@ -1,0 +1,11 @@
+{
+  "install_s": 17.6,
+  "dump_s": 5104.2,
+  "train_s": 8228.9,
+  "evaluate_s": 50.4,
+  "serve_s": 890.4,
+  "epochs": 2,
+  "limit": null,
+  "dtype": "fp32",
+  "grad_ckpt": true
+}

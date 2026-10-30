@@ -1,0 +1,17 @@
+{
+  "checkpoint": "outputs/baseline/checkpoints/draft_step003750.pt",
+  "step": 3750,
+  "split": "heldout",
+  "loss": [
+    3.495347021621129,
+    3.832816345510578,
+    4.052924732612591
+  ],
+  "acc": [
+    0.44516025463051206,
+    0.3928563434817637,
+    0.3561180905076274
+  ],
+  "assistant_tokens": 41535,
+  "batches": 25
+}

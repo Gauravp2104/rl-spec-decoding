@@ -9,3 +9,5 @@ wandb/
 outputs/
 data/raw/
 data/streams/
+data_10k/
+data_38k/
