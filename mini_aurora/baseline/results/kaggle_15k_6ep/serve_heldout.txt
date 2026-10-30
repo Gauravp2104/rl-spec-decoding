@@ -1,0 +1,127 @@
+draft outputs/baseline/checkpoints/draft_step011250.pt (version 11250)
+100 held-out chat requests
+  chat-00974   128 tok  τ̄ 0.61    27.6 tok/s  match=True
+  chat-00911   123 tok  τ̄ 0.77    34.7 tok/s  match=True
+  chat-00910   128 tok  τ̄ 1.06    35.6 tok/s  match=True
+  chat-00916   120 tok  τ̄ 0.51    29.8 tok/s  match=True
+  chat-00976    46 tok  τ̄ 1.14    37.3 tok/s  match=True
+  chat-00961   120 tok  τ̄ 0.68    31.1 tok/s  match=True
+  chat-00927   128 tok  τ̄ 0.65    32.4 tok/s  match=True
+  chat-00962    32 tok  τ̄ 0.82    33.4 tok/s  match=True
+  chat-00972   128 tok  τ̄ 0.61    31.9 tok/s  match=True
+  chat-00900   128 tok  τ̄ 0.49    20.5 tok/s  match=True
+  chat-00990   128 tok  τ̄ 0.73    29.4 tok/s  match=True
+  chat-00922    19 tok  τ̄ 0.54    21.6 tok/s  match=True
+  chat-00992   128 tok  τ̄ 0.47    29.0 tok/s  match=True
+  chat-00959    82 tok  τ̄ 0.64    25.8 tok/s  match=True
+  chat-00914   128 tok  τ̄ 0.62    27.9 tok/s  match=True
+  chat-00931    10 tok  τ̄ 2.67    51.0 tok/s  match=True
+  chat-00906   128 tok  τ̄ 0.90    22.0 tok/s  match=True
+  chat-00941   128 tok  τ̄ 1.19    29.5 tok/s  match=True
+  chat-00918   128 tok  τ̄ 0.59    27.2 tok/s  match=True
+  chat-00942   128 tok  τ̄ 0.76    25.2 tok/s  match=True
+  chat-00967    33 tok  τ̄ 0.79    33.6 tok/s  match=True
+  chat-00963   128 tok  τ̄ 0.68    30.1 tok/s  match=True
+  chat-00930    13 tok  τ̄ 1.00    31.9 tok/s  match=True
+  chat-00957   128 tok  τ̄ 0.40    25.9 tok/s  match=True
+  chat-00993   128 tok  τ̄ 0.39    20.4 tok/s  match=True
+  chat-00907   128 tok  τ̄ 0.49    29.2 tok/s  match=True
+  chat-00923   128 tok  τ̄ 0.63    24.8 tok/s  match=True
+  chat-00945    53 tok  τ̄ 0.80    21.8 tok/s  match=True
+  chat-00988   128 tok  τ̄ 0.80    31.4 tok/s  match=True
+  chat-00915   128 tok  τ̄ 1.15    31.1 tok/s  match=True
+  chat-00966   101 tok  τ̄ 0.47    28.7 tok/s  match=True
+  chat-00973   128 tok  τ̄ 0.44    28.9 tok/s  match=True
+  chat-00997   128 tok  τ̄ 1.05    35.9 tok/s  match=True
+  chat-00955   128 tok  τ̄ 0.71    33.2 tok/s  match=True
+  chat-00925   128 tok  τ̄ 0.68    21.9 tok/s  match=True
+  chat-00998   128 tok  τ̄ 0.84    37.1 tok/s  match=True
+  chat-00937   128 tok  τ̄ 0.15    22.1 tok/s  match=True
+  chat-00986   128 tok  τ̄ 0.79    34.7 tok/s  match=True
+  chat-00987   128 tok  τ̄ 0.59    31.7 tok/s  match=True
+  chat-00979     7 tok  τ̄ 0.40    23.6 tok/s  match=True
+  chat-00932   128 tok  τ̄ 0.98    31.7 tok/s  match=True
+  chat-00996   128 tok  τ̄ 0.44    27.9 tok/s  match=True
+  chat-00926    33 tok  τ̄ 0.79    30.9 tok/s  match=True
+  chat-00949   128 tok  τ̄ 0.60    28.8 tok/s  match=True
+  chat-00968   128 tok  τ̄ 0.84    34.4 tok/s  match=True
+  chat-00943   128 tok  τ̄ 0.56    30.1 tok/s  match=True
+  chat-00971   128 tok  τ̄ 0.59    30.3 tok/s  match=True
+  chat-00985   128 tok  τ̄ 0.90    35.1 tok/s  match=True
+  chat-00948   128 tok  τ̄ 0.53    19.2 tok/s  match=True
+  chat-00989   128 tok  τ̄ 0.71    22.8 tok/s  match=True
+  chat-00965    10 tok  τ̄ 2.67    43.7 tok/s  match=True
+  chat-00929   128 tok  τ̄ 0.59    31.9 tok/s  match=True
+  chat-00924   128 tok  τ̄ 0.65    28.2 tok/s  match=True
+  chat-00975   128 tok  τ̄ 0.63    20.9 tok/s  match=True
+  chat-00939   128 tok  τ̄ 0.67    33.6 tok/s  match=True
+  chat-00935   102 tok  τ̄ 0.84    29.4 tok/s  match=True
+  chat-00934    58 tok  τ̄ 0.74    28.9 tok/s  match=True
+  chat-00970   128 tok  τ̄ 0.81    35.9 tok/s  match=True
+  chat-00952   128 tok  τ̄ 0.80    29.0 tok/s  match=True
+  chat-00920   128 tok  τ̄ 0.63    23.5 tok/s  match=True
+  chat-00917   128 tok  τ̄ 0.87    29.3 tok/s  match=True
+  chat-00950    71 tok  τ̄ 0.53    29.6 tok/s  match=True
+  chat-00960   128 tok  τ̄ 0.84    35.9 tok/s  match=True
+  chat-00938   128 tok  τ̄ 0.56    31.2 tok/s  match=True
+  chat-00936   128 tok  τ̄ 0.66    27.2 tok/s  match=True
+  chat-00947   128 tok  τ̄ 1.40    40.5 tok/s  match=True
+  chat-00919   128 tok  τ̄ 0.74    35.4 tok/s  match=True
+  chat-00984   128 tok  τ̄ 0.46    20.6 tok/s  match=True
+  chat-00933   128 tok  τ̄ 0.63    31.2 tok/s  match=True
+  chat-00946   128 tok  τ̄ 0.68    33.9 tok/s  match=True
+  chat-00902   128 tok  τ̄ 0.61    22.2 tok/s  match=True
+  chat-00982    10 tok  τ̄ 2.67    49.6 tok/s  match=True
+  chat-00909   128 tok  τ̄ 0.57    27.4 tok/s  match=True
+  chat-00954   128 tok  τ̄ 0.56    31.7 tok/s  match=True
+  chat-00958   128 tok  τ̄ 0.63    32.0 tok/s  match=True
+  chat-00928   128 tok  τ̄ 0.51    22.7 tok/s  match=True
+  chat-00951   128 tok  τ̄ 0.81    29.7 tok/s  match=True
+  chat-00969    25 tok  τ̄ 1.17    38.9 tok/s  match=True
+  chat-00994   128 tok  τ̄ 0.81    36.3 tok/s  match=True
+  chat-00912   125 tok  τ̄ 0.95    26.7 tok/s  match=True
+  chat-00953   128 tok  τ̄ 0.57    31.6 tok/s  match=True
+  chat-00944   128 tok  τ̄ 0.84    29.0 tok/s  match=True
+  chat-00940   116 tok  τ̄ 1.34    45.7 tok/s  match=True
+  chat-00978   128 tok  τ̄ 0.65    33.4 tok/s  match=True
+  chat-00956    97 tok  τ̄ 0.60    26.7 tok/s  match=True
+  chat-00921   123 tok  τ̄ 0.57    26.4 tok/s  match=True
+  chat-00901   128 tok  τ̄ 0.61    30.5 tok/s  match=True
+  chat-00905   128 tok  τ̄ 0.49    29.8 tok/s  match=True
+  chat-00981    68 tok  τ̄ 0.81    35.6 tok/s  match=True
+  chat-00913    99 tok  τ̄ 1.00    39.0 tok/s  match=True
+  chat-00980   128 tok  τ̄ 0.59    26.7 tok/s  match=True
+  chat-00983   128 tok  τ̄ 0.51    21.1 tok/s  match=True
+  chat-00904   128 tok  τ̄ 0.66    29.9 tok/s  match=True
+  chat-00903   128 tok  τ̄ 0.72    30.4 tok/s  match=True
+  chat-00995   128 tok  τ̄ 0.57    31.3 tok/s  match=True
+  chat-00964   128 tok  τ̄ 0.53    30.9 tok/s  match=True
+  chat-00991   128 tok  τ̄ 0.56    31.4 tok/s  match=True
+  chat-00977   128 tok  τ̄ 0.59    31.6 tok/s  match=True
+  chat-00908    22 tok  τ̄ 1.62    50.2 tok/s  match=True
+  chat-00999    57 tok  τ̄ 0.49    29.1 tok/s  match=True
+{
+  "chat": {
+    "requests": 100,
+    "tau": 0.671,
+    "alpha": [
+      0.421,
+      0.174,
+      0.076
+    ],
+    "tokens_per_s": 28.9,
+    "matches": "100/100"
+  },
+  "all": {
+    "requests": 100,
+    "tau": 0.671,
+    "alpha": [
+      0.421,
+      0.174,
+      0.076
+    ],
+    "tokens_per_s": 28.9,
+    "matches": "100/100"
+  }
+}
+log → outputs/server/heldout.jsonl
