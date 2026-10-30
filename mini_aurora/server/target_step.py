@@ -30,11 +30,14 @@ def target_forward(
     input_ids: torch.Tensor,
     past_key_values: Cache | None = None,
     num_logits: int = 0,
+    attention_mask: torch.Tensor | None = None,
+    position_ids: torch.Tensor | None = None,
 ) -> TargetStep:
     """Forward ``input_ids`` (1, T) after the tokens already in ``past_key_values`` (if any).
 
     ``num_logits`` keeps only the last N positions' logits (0 = all); a 1K-token prefill would otherwise
-    materialise a 1K × 151,936 logits tensor.
+    materialise a 1K × 151,936 logits tensor. ``attention_mask`` (additive, (1, 1, T, past + T)) and
+    ``position_ids`` (1, T) override the causal default: tree drafting verifies several branches in one pass.
     """
     captured, handles = {}, []
 
@@ -49,11 +52,18 @@ def target_forward(
         handles.append(layers[idx].register_forward_hook(hook(idx)))
     handles.append(target._get_final_norm().register_forward_hook(hook("norm")))
     try:
+        extra = {}
+        if attention_mask is not None:
+            past = past_key_values.get_seq_length() if past_key_values is not None else 0
+            extra["attention_mask"] = attention_mask
+            extra["position_ids"] = position_ids
+            extra["cache_position"] = torch.arange(past, past + input_ids.shape[1], device=input_ids.device)
         out = target.model(
             input_ids=input_ids,
             past_key_values=past_key_values,
             use_cache=past_key_values is not None,
             logits_to_keep=num_logits,
+            **extra,
         )
     finally:
         for handle in handles:

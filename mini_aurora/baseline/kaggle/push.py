@@ -67,19 +67,20 @@ def push_source(user: str, chat_jsonl: Path | None = None, tag: str = "") -> str
 
 
 def push_kernel(user: str, src_slug: str, epochs: int, dtype: str, grad_ckpt: bool, limit: int | None, serve: bool, tag: str = "",
-                batch: int = 2, accum: int = 4) -> str:
+                batch: int = 2, accum: int = 4, k: int = 3, serve_ckpt: str | None = None, tree_topk: int = 1, tree_beam: int = 1) -> str:
     kid = f"{user}/{KERNEL}{tag}"
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         script = (HERE / "run_bp04.py").read_text()
         env = {"BP04_EPOCHS": str(epochs), "BP04_DTYPE": dtype, "BP04_GRAD_CKPT": "1" if grad_ckpt else "0", "BP04_LIMIT": str(limit or ""), "BP04_SERVE": "1" if serve else "0",
-               "BP04_BATCH": str(batch), "BP04_ACCUM": str(accum)}
+               "BP04_BATCH": str(batch), "BP04_ACCUM": str(accum), "BP04_K": str(k), "BP04_SERVE_ONLY": "1" if serve_ckpt else "0",
+               "BP04_TREE_TOPK": str(tree_topk), "BP04_TREE_BEAM": str(tree_beam)}
         header = "import os\n" + "".join(f"os.environ[{k!r}] = {v!r}\n" for k, v in env.items())
         (d / "run_bp04.py").write_text(header + script)
         (d / "kernel-metadata.json").write_text(json.dumps({
             "id": kid, "title": KERNEL + tag, "code_file": "run_bp04.py", "language": "python", "kernel_type": "script",
             "is_private": True, "enable_gpu": True, "enable_internet": True,
-            "dataset_sources": [src_slug], "competition_sources": [], "kernel_sources": []}))
+            "dataset_sources": [src_slug], "competition_sources": [], "kernel_sources": [serve_ckpt] if serve_ckpt else []}))
         print(kaggle("kernels", "push", "-p", str(d)).strip().splitlines()[-1])
     return kid
 
@@ -132,11 +133,19 @@ def main() -> None:
     ap.add_argument("--tag", default="", help="suffix for the dataset and kernel names, e.g. -9k (keeps the default runs untouched)")
     ap.add_argument("--batch-size", type=int, default=2, help="micro-batch (effective batch = batch-size x accumulation)")
     ap.add_argument("--accumulation", type=int, default=4)
+    ap.add_argument("-k", type=int, default=3, help="guesses per round in the held-out serve")
+    ap.add_argument("--serve-ckpt", default=None, metavar="KERNEL",
+                    help="serve-only: no dump/train, serve this finished kernel's checkpoint at -k (e.g. <user>/rl-spec-decoding-bp04-9k)")
+    ap.add_argument("--src-tag", default=None, help="dataset tag when it differs from --tag (serve-only reuses the training run's dataset)")
+    ap.add_argument("--tree-topk", type=int, default=1, help="tree drafting in the serve step: children per node")
+    ap.add_argument("--tree-beam", type=int, default=1, help="tree drafting in the serve step: nodes per depth")
     a = ap.parse_args()
     kid = f"{a.user}/{KERNEL}{a.tag}"
     if not a.pull_only:
-        slug = push_source(a.user, Path(a.chat_jsonl) if a.chat_jsonl else None, a.tag)
-        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit, not a.no_serve, a.tag, a.batch_size, a.accumulation)
+        src_tag = a.tag if a.src_tag is None else a.src_tag
+        slug = f"{a.user}/{DATASET}{src_tag}" if a.serve_ckpt else push_source(a.user, Path(a.chat_jsonl) if a.chat_jsonl else None, src_tag)
+        kid = push_kernel(a.user, slug, a.epochs, a.dtype, not a.no_grad_ckpt, a.limit, not a.no_serve, a.tag, a.batch_size, a.accumulation,
+                          a.k, a.serve_ckpt, a.tree_topk, max(a.tree_beam, a.tree_topk))
         print("final:", wait(kid))
     pull(kid, a.label or f"{a.dtype}{'' if a.no_grad_ckpt else '_ckpt'}_{a.epochs}ep{'_limit' + str(a.limit) if a.limit else ''}")
 
