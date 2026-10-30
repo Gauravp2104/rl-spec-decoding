@@ -1,0 +1,10 @@
+{
+  "mode": "1p7b",
+  "dump_s": 964.9,
+  "train_s": 4976.1,
+  "evaluate_s": 53.9,
+  "serve_s": 1528.8,
+  "limit": null,
+  "epochs": 8,
+  "target": "Qwen/Qwen3-1.7B"
+}

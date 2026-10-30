@@ -7,6 +7,8 @@ same object serves plain generation (``target.model.generate``) and EAGLE-3 feat
 import time
 from dataclasses import dataclass
 
+import os
+
 import torch
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
@@ -14,7 +16,7 @@ from mini_aurora.device import get_device, get_dtype  # sets MPS env vars before
 
 from aurora.models.target.eagle3_target_model import HFTargetModel  # noqa: I001
 
-DEFAULT_TARGET = "Qwen/Qwen3-0.6B"
+DEFAULT_TARGET = os.environ.get("MINI_AURORA_TARGET", "Qwen/Qwen3-0.6B")  # BP-09: e.g. Qwen/Qwen3-1.7B
 # Aurora's default for a 28-layer model: [1, L // 2 - 1, L - 4].
 AUX_LAYERS = [1, 13, 24]
 

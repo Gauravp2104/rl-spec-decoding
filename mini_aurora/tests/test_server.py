@@ -51,8 +51,10 @@ def test_target_forward_matches_capture_and_reference(setup):
     target, _, prompt, ref = setup
     full = target_forward(target, prompt)
     features = capture_features(target, prompt)
-    assert torch.equal(full.aux_hidden, features.hidden_states)
-    assert torch.equal(full.last_hidden, features.last_hidden_states)
+    # Bit-exact on CPU; CUDA kernels round differently between the two forward paths, so allow fp32 noise there.
+    close = torch.equal if full.aux_hidden.device.type == "cpu" else (lambda a, b: torch.allclose(a, b, atol=1e-4, rtol=1e-4))
+    assert close(full.aux_hidden, features.hidden_states)
+    assert close(full.last_hidden, features.last_hidden_states)
     assert full.logits.shape == (1, prompt.shape[1], target.model.config.vocab_size)
 
     # Greedy decoding through target_forward on a DynamicCache reproduces model.generate.

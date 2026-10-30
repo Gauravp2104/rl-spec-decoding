@@ -1,0 +1,26 @@
+{
+  "source": "data/raw/chat.jsonl",
+  "dtype": "bfloat16",
+  "model": "Qwen/Qwen3-1.7B",
+  "aux_layers": [
+    1,
+    13,
+    24
+  ],
+  "splits": {
+    "train": {
+      "conversations": 900,
+      "skipped": 0,
+      "tokens": 470938,
+      "assistant_tokens": 366622,
+      "seconds": 801.2
+    },
+    "heldout": {
+      "conversations": 100,
+      "skipped": 0,
+      "tokens": 52959,
+      "assistant_tokens": 41535,
+      "seconds": 91.3
+    }
+  }
+}
