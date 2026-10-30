@@ -1,0 +1,13 @@
+.venv
+.venv.nosync/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.DS_Store
+wandb/
+outputs/
+data/raw/
+data/streams/
+data_10k/
+data_38k/

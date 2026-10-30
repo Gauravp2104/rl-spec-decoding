@@ -1,0 +1,17 @@
+{
+  "checkpoint": "/kaggle/working/bp09/checkpoints/draft_step000896.pt",
+  "step": 896,
+  "split": "heldout",
+  "loss": [
+    4.388842064949441,
+    4.804734311930981,
+    5.059961784843131
+  ],
+  "acc": [
+    0.35361507617639437,
+    0.2919918550191638,
+    0.2596737746194595
+  ],
+  "assistant_tokens": 41535,
+  "batches": 25
+}
