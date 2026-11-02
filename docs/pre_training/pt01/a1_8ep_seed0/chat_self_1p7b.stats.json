@@ -1,0 +1,27 @@
+{
+  "conversations": 1000,
+  "turns_original": 1929,
+  "turns_generated": 1336,
+  "dropped_pairs": 593,
+  "conversations_truncated": 399,
+  "hit_cap_rate": 0.4708,
+  "looped_rate": 0.0172,
+  "empty_answers": 0,
+  "duplicate_answers": 50,
+  "assistant_tokens_original": 401299,
+  "assistant_tokens_generated": 484337,
+  "mean_answer_tokens_original": 208.0,
+  "mean_answer_tokens_generated": 362.5,
+  "seconds": 8398.6,
+  "config": {
+    "source": "data/raw/chat.jsonl",
+    "model": "Qwen/Qwen3-1.7B",
+    "dtype": "float32",
+    "decoding": "greedy",
+    "enable_thinking": false,
+    "max_new_tokens": 512,
+    "max_tokens": 1024,
+    "shard_size": 100,
+    "limit": null
+  }
+}
