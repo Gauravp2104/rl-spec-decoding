@@ -6,6 +6,9 @@ PRs titled `[PT-NN] …`, label `pre-training`, GitHub Project "Draft pre-traini
 draft that BP-04 produces and BP-06 / BP-08 start from. The online loop, the loss and the GRPO project are out of
 scope.
 
+**Outcome of PT-01 (2026-11-06): GO for PT-02.** A1 reached held-out chat τ̄ 0.473 (95% CI 0.447–0.499) vs BP-09's
+0.319, 100/100 lossless. Details: [`pt01/README.md`](pt01/README.md); checkpoint in release `pt01-a1-v1`.
+
 ## 1. Motivation
 
 Every BP-08 arm starts from a weak offline draft. More ShareGPT data helps but slowly:
@@ -66,7 +69,7 @@ then land well above A1, the 900 → 27K data-scale effect.
 | epochs | 8 in PT-01 (matches BP-09); 4 in PT-02 to bound cost (27K × 4 ≈ 106K conversation-epochs, more than `kaggle_15k_6ep`'s 90K) |
 | precision | fp32 draft weights + gradient checkpointing; fp32 target for generation, dumps and τ̄ |
 | sequence | ≤ 1024 tokens per training sequence |
-| chat template | `enable_thinking=False`, identical in generation, dump and serving |
+| chat template | generation and serving: Qwen3's native template, `enable_thinking=False`; dump: Aurora's `qwen` template (system prompt, no `<think></think>` block), the same for every arm |
 | serving | greedy, bs = 1, 128 new tokens, KV-cached target, `--check` on |
 
 ## 4. Self-distilled data (A1, B1)
@@ -77,7 +80,8 @@ Qwen3-1.7B: turn i is generated given the user turns and the target's own earlie
 - batched across conversations at the same turn index (left padding), resumable shards;
 - truncate to 1024 tokens;
 - loss mask on the regenerated assistant tokens, including the end-of-turn token;
-- drop exact-duplicate responses but keep repetitive ones, because greedy serving produces them too;
+- count exact-duplicate responses but keep them, along with repetitive ones (greedy serving produces them too);
+  rows are never dropped, so the positional held-out split stays the same as A0's;
 - log the share of turns that hit the 512 cap or loop, and the assistant-token count per arm.
 
 The same script (`mini_aurora/data/regenerate.py`, written in PT-01) produces B1's data in PT-02. Conversations
@@ -89,7 +93,9 @@ already regenerated in PT-01 are reused.
 It keeps τ̄ comparable with every row of §1. Also report 100 CodeAlpaca and 100 GSM8K stream rows as out-of-domain
 checks; no arm trains on code or math.
 
-**Per arm (A0 re-evaluated with the same harness):**
+**Per arm (A0 re-evaluated with the same harness):** in PT-01, A0 used BP-09's recorded serve results (same
+harness, code and hardware; see `pt01/README.md`) because the BP-09 checkpoint was not available. PT-02 adds A0 if it
+is recovered.
 - τ̄ with a 95% bootstrap CI over requests, and α1 / α2 / α3;
 - lossless count, which must be 100/100 (chat) or the run is invalid;
 - teacher-forced top-1 accuracy per position on the held-out dumps;
@@ -103,7 +109,7 @@ B1. It needs no retraining and shows whether the self-distillation gain carries 
 | ID | scope | deliverables | branch |
 |---|---|---|---|
 | PT-00 | plan | this document, final; no implementation | `pt/00-plan-1p7b` |
-| PT-01 | pilot vs BP-09 | `mini_aurora/data/regenerate.py` (batched, sequential-turn greedy regeneration, resumable shards); regenerate BP-09's 900 conversations; train A1 with BP-09's config (8 ep, ~2 h on a T4); evaluate A0 and A1 (§5); generation stats; go / no-go for PT-02 (§8) | `pt/01-pilot-900` |
+| PT-01 | pilot vs BP-09 | `mini_aurora/data/regenerate.py` (batched, sequential-turn greedy regeneration, resumable shards); regenerate BP-09's 900 conversations; train A1 with BP-09's config (8 ep, ~2 h on a T4); evaluate A0 and A1 (§5); generation stats; go / no-go for PT-02 (§8) | `pt/01-self-distill-data` |
 | PT-02 | scale-up, gated on PT-01 | ~26.5K pool via `download --per-domain` + `extend_pool --train`; regenerate it; dump and 4-epoch training of B1 on Zaratan (chunked if scratch can't hold a full dump, §7); evaluate B1 (§5); results table and figures; optional tree configs | `pt/02-1p7b-27k` |
 
 ## 7. Compute and disk budget
