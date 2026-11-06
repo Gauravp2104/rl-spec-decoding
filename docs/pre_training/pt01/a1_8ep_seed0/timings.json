@@ -1,0 +1,12 @@
+{
+  "arm": "A1",
+  "target": "Qwen/Qwen3-1.7B",
+  "limit": null,
+  "epochs": 8,
+  "seed": 0,
+  "regenerate_s": 8469.9,
+  "dump_s": 1022.1,
+  "train_s": 5317.3,
+  "evaluate_s": 54.4,
+  "serve_s": 1442.9
+}
