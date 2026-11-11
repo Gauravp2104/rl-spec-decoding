@@ -75,3 +75,43 @@ Smoke first (20 conversations, 1 epoch: dump 84 s, train 32 s, evaluate 20 s), t
 - The 1.7B draft predicts its target's next token better (acc 0.35 vs 0.31) but serves the same τ̄ (0.32): the
   acceptance ceiling comes from the static draft and K = 3, not from the target size. Files: `results/1p7b/`.
 - tok/s halves with the bigger target (every verification pass is a 1.7B forward); not compared to target-only here.
+
+# [PT-02] Self-distilled 1.7B draft at ~27K conversations (B1)
+
+Plan: `docs/pre_training/PLAN.md` §2, §4–§7. A job chain for arm B1, plus the PLAN §5 evaluation of A1 (PT-01,
+release `pt01-a1-v1`) and B1 with the same harness. Environment layout as in `docs/zaratan_setup.md` (`~/rl-work`
+for venv, repo, HF cache). Large outputs go under `$PT02` (default `~/scratch.msai635/rl-spec-decoding/pt02`).
+Every path and knob is in `pt02_common.sh`.
+
+```bash
+bash mini_aurora/zaratan/pt02_prepare.sh                 # login node, once: 27K pool, 8 parts, A1 checkpoint, df check
+SMOKE=1 bash mini_aurora/zaratan/submit_pt02.sh          # tiny end-to-end chain under $PT02/b1_smoke (~1 h of A100 in total)
+bash mini_aurora/zaratan/submit_pt02.sh                  # full chain
+DRY=1 bash mini_aurora/zaratan/submit_pt02.sh            # print the sbatch commands only
+```
+
+```
+pt02_regen.sbatch  (array 0-7, 6 h)  ──afterok──> pt02_dump.sbatch (8 h) ──afterok──> pt02_train.sbatch (16 h) ──> pt02_eval b1
+                                                                         └──afterok──> pt02_eval a1  (and a0 with A0=<BP-09 ckpt dir>)
+```
+
+| job | does | outputs (`$PT02/b1/`) |
+|---|---|---|
+| `pt02_prepare.sh` (login) | seeded download of all filtered ShareGPT chat; `extend_pool` drops the 1000 BP-02 rows and appends `chat-00900…00999` last; 8 contiguous parts; rows 800–999 of `data/raw/chat.jsonl` for a ShareGPT held-out dump; A1 checkpoint from the release | `../text/`, `../a1/` |
+| `pt02_regen.sbatch` | `mini_aurora.data.regenerate` on one part: greedy, fp32, thinking off, ≤ 512 new tokens (as A1); resumable shards | `regen/part_NN.jsonl` |
+| `pt02_dump.sbatch` | merges the parts (row order checked, held-out rows last), whole-pool stats; dumps the self-distilled pool and the ShareGPT held-out rows | `chat_27k_self_1p7b{.jsonl,.stats.json}`, `dump_self/`, `dump_sharegpt_heldout/heldout/` |
+| `pt02_train.sbatch` | BP-09 / A1 recipe, 4 epochs, seed 0; deletes `dump_self/train` when done | `checkpoints/` (+ `eval.json`, `train_log.csv`) |
+| `pt02_eval.sbatch` | teacher-forced acc on both held-out dumps; `serve --check` on held-out chat, 100 code and 100 math rows (τ̄, α_i, lossless, target-only tok/s); with `TREES=1`, tree configs 2 / 4 | `eval/<a1\|b1\|a0>/` |
+
+- **Resuming.** A timed-out regen task picks up at its last finished shard: run `FROM=regen` again, or
+  `sbatch --array=<i> …`. A dump with a `manifest.json` is skipped. Training cannot resume, so delete
+  `checkpoints/` and run `FROM=train`. `FROM=eval EVALS=b1` reruns one evaluation. `AFTER=<jobid>` makes the
+  first stage wait for another job.
+- **Memory.** `GEN_BATCH=64` assumes an 80 GB A100. On a 40 GB card, use `GEN_BATCH=32` (fp32 KV is ~230 KB per
+  token). `GEN_BATCH` is not part of the resume config, so it can be changed between resubmits. `SHARD_SIZE` is
+  part of it and must stay the same.
+- **Disk.** `dump_self/` peaks at ~240 GB on `$PT02`. `pt02_prepare.sh` prints `df` and the BeeGFS quota. If it
+  doesn't fit, use the PLAN §7 fallback: set `PT02` elsewhere, or run on the first 9K rows.
+- **Cost (estimate, to be replaced by the smoke and first-shard timings):** regen ~5–10 A100-h across the 8
+  tasks, dump ~3 h, train ~6–8 h, eval ~1.5 h per draft. That is ~17–24 A100-h ≈ 800–1,150 SU at 48 SU/h.
+  Walltimes are caps, and only elapsed time is charged.
