@@ -10,7 +10,9 @@
 # PT-02 step 2 (after every regen task): merge the regenerated parts, then dump Qwen3-1.7B features for
 #   - the merged self-distilled pool -> $DUMP/{train,heldout}   (~240 GB at full size)
 #   - the ShareGPT held-out pool     -> $DUMP_SG/heldout          (train/ deleted; for teacher-forced acc on A0-style data)
-# A dump with a manifest.json is complete and skipped on resubmit; an incomplete one is deleted and redone.
+# Both dumps are packed into shards of $DUMP_SHARD_SIZE conversations (2 files each; mini_aurora/baseline/shards.py),
+# so the full dump is ~110 files instead of ~27K. A dump with a manifest.json is complete and skipped on resubmit;
+# an interrupted one resumes at its first unfinished shard (finished shards have an .idx.pt).
 set -eo pipefail
 source "${REPO:-$SLURM_SUBMIT_DIR}/mini_aurora/zaratan/pt02_common.sh"
 job_header
@@ -50,8 +52,7 @@ PY
 
 dump() {  # jsonl out [limit]
   if [ -s "$2/manifest.json" ]; then echo "$2 complete, skipped"; return; fi
-  rm -rf "$2"
-  python -m mini_aurora.baseline.dump --jsonl "$1" --out "$2" --heldout 100 ${3:+--limit $3}
+  python -m mini_aurora.baseline.dump --jsonl "$1" --out "$2" --heldout 100 --shard-size "$DUMP_SHARD_SIZE" ${3:+--limit $3}
 }
 t0=$(date +%s)
 dump "$SELF_POOL" "$DUMP" "${LIMIT:+$(( LIMIT * $(ls "$TEXT"/parts/part_*.jsonl | wc -l) ))}"
@@ -61,4 +62,5 @@ rm -rf "$DUMP_SG/train"
 t2=$(date +%s)
 echo "{\"dump_self_s\": $((t1-t0)), \"dump_sharegpt_heldout_s\": $((t2-t1))}" | tee "$RUN_DIR/timings_dump.json"
 du -sh "$DUMP" "$DUMP_SG"
+echo "files: $(find "$DUMP" "$DUMP_SG" -type f | wc -l)"
 job_footer

@@ -99,17 +99,21 @@ pt02_regen.sbatch  (array 0-7, 6 h)  ──afterok──> pt02_dump.sbatch (8 h)
 |---|---|---|
 | `pt02_prepare.sh` (login) | seeded download of all filtered ShareGPT chat; `extend_pool` drops the 1000 BP-02 rows and appends `chat-00900…00999` last; 8 contiguous parts; rows 800–999 of `data/raw/chat.jsonl` for a ShareGPT held-out dump; A1 checkpoint from the release | `../text/`, `../a1/` |
 | `pt02_regen.sbatch` | `mini_aurora.data.regenerate` on one part: greedy, fp32, thinking off, ≤ 512 new tokens (as A1); resumable shards | `regen/part_NN.jsonl` |
-| `pt02_dump.sbatch` | merges the parts (row order checked, held-out rows last), whole-pool stats; dumps the self-distilled pool and the ShareGPT held-out rows | `chat_27k_self_1p7b{.jsonl,.stats.json}`, `dump_self/`, `dump_sharegpt_heldout/heldout/` |
+| `pt02_dump.sbatch` | merges the parts (row order checked, held-out rows last), whole-pool stats; dumps the self-distilled pool and the ShareGPT held-out rows, packed into shards of 512 conversations (~110 files in all) | `chat_27k_self_1p7b{.jsonl,.stats.json}`, `dump_self/`, `dump_sharegpt_heldout/heldout/` |
 | `pt02_train.sbatch` | BP-09 / A1 recipe, 4 epochs, seed 0; deletes `dump_self/train` when done | `checkpoints/` (+ `eval.json`, `train_log.csv`) |
 | `pt02_eval.sbatch` | teacher-forced acc on both held-out dumps; `serve --check` on held-out chat, 100 code and 100 math rows (τ̄, α_i, lossless, target-only tok/s); with `TREES=1`, tree configs 2 / 4 | `eval/<a1\|b1\|a0>/` |
 
 - **Resuming.** A timed-out regen task picks up at its last finished shard: run `FROM=regen` again, or
-  `sbatch --array=<i> …`. A dump with a `manifest.json` is skipped. Training cannot resume, so delete
+  `sbatch --array=<i> …`. A dump with a `manifest.json` is skipped; an interrupted dump resumes at its first unfinished shard (rerun `FROM=dump`). Training cannot resume, so delete
   `checkpoints/` and run `FROM=train`. `FROM=eval EVALS=b1` reruns one evaluation. `AFTER=<jobid>` makes the
   first stage wait for another job.
 - **Memory.** `GEN_BATCH=64` assumes an 80 GB A100. On a 40 GB card, use `GEN_BATCH=32` (fp32 KV is ~230 KB per
   token). `GEN_BATCH` is not part of the resume config, so it can be changed between resubmits. `SHARD_SIZE` is
   part of it and must stay the same.
+- **File quota.** The dumps are packed (`dump --shard-size $DUMP_SHARD_SIZE`, default 512): each shard is a raw
+  `shard_NNNNN.bin` plus a small `shard_NNNNN.idx.pt`, so the full run writes ~110 dump files instead of ~27K
+  `.ckpt` files. Training reads the shards through a memory map and shuffles per conversation as before.
+  `DUMP_SHARD_SIZE` is part of the dump's resume config: keep it fixed for a run, or delete the dump.
 - **Disk.** `dump_self/` peaks at ~240 GB on `$PT02`. `pt02_prepare.sh` prints `df` and the BeeGFS quota. If it
   doesn't fit, use the PLAN §7 fallback: set `PT02` elsewhere, or run on the first 9K rows.
 - **Cost (estimate, to be replaced by the smoke and first-shard timings):** regen ~5–10 A100-h across the 8

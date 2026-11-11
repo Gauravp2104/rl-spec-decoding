@@ -20,6 +20,8 @@ SEED="${SEED:-0}"
 PARTS="${PARTS:-8}"                     # regeneration array size (fixed by pt02_prepare.sh)
 GEN_BATCH="${GEN_BATCH:-64}"            # regenerate --batch-size; lower it (e.g. 32) on a 40 GB A100 if it OOMs
 SHARD_SIZE="${SHARD_SIZE:-256}"         # regenerate --shard-size; part of the resume config, keep it fixed per run
+DUMP_SHARD_SIZE="${DUMP_SHARD_SIZE:-512}" # dump --shard-size: 2 files per 512 conversations (~110 files, not ~27K),
+                                        # for the class scratch file quota; part of the dump's resume config too
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-512}" # same as A1 (PT-01), so B1 - A1 is data scale only
 TREES="${TREES:-}"                      # non-empty -> eval also serves tree configs top-k / beam 2 and 4
 
