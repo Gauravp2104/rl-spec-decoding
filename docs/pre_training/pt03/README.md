@@ -27,6 +27,17 @@ top-k 4 / beam 2 runs as beam 4 and is the same setting (its files are kept for 
 The chain rows reproduce the recorded numbers (BP-09 0.319, PT-01 0.473, #33 0.671), so the tree rows are on the same
 footing as the earlier results.
 
+95% CI, 2,000-sample bootstrap over the 100 requests (same method as PT-01; the A1 chain CI reproduces its 0.447–0.499):
+
+| draft | chain | top-k 2 / beam 2 | top-k 2 / beam 4 | top-k 4 / beam 4 |
+|---|---|---|---|---|
+| A0 | 0.300–0.338 | 0.406–0.456 | 0.420–0.474 | 0.505–0.562 |
+| A1 | 0.447–0.499 | 0.586–0.649 | 0.615–0.681 | 0.707–0.780 |
+| 15K/6ep | 0.631–0.711 | 0.824–0.930 | 0.875–0.989 | 0.997–1.119 |
+
+Every tree setting is separated from the chain of the same draft, and A1 is separated from A0 at every setting
+(A1's lower bound is above A0's upper bound in all four columns).
+
 Per-position acceptance α1 / α2 / α3 and T4 throughput (tok/s, fp32 target, speculative):
 
 | draft | chain | top-k 2 / beam 2 | top-k 2 / beam 4 | top-k 4 / beam 4 |
@@ -54,8 +65,7 @@ Serve time per setting: 24–37 min for the 1.7B drafts, 14–16 min for 0.6B; a
    #36 finishes (`push_pt03` needs a `b1` entry pointing at its checkpoint).
 2. **Depth fixed at 3**: #34 showed depth helps on the 0.6B 9K draft (chain K = 5 0.647 vs K = 3 0.623; K = 6 top-k 3
    beam 8 reached 1.078). Deeper trees on the 1.7B drafts are not measured here.
-3. **Single seed, 100 requests**: no CI on the tree rows; the per-request logs are in `*/serve_heldout.jsonl` for a
-   bootstrap.
+3. **Single seed, 100 requests**: the CIs above are over requests, not over training seeds.
 4. **Chat only**: no code / math out-of-domain serve.
 
 ## Files
