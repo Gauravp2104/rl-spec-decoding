@@ -5,8 +5,9 @@
     python -m mini_aurora.baseline.kaggle.push_pt03 --user <u> 15k6ep             # BP-04 15K/6ep (attached bp04-15k-6ep kernel), 0.6B target
     python -m mini_aurora.baseline.kaggle.push_pt03 --user <u> a1 -n 3            # smoke
     python -m mini_aurora.baseline.kaggle.push_pt03 --user <u> a1 --pull-only
+    python -m mini_aurora.baseline.kaggle.push_pt03 --user <u> a1 --tag -depth --configs 5:1:1,5:4:4,6:3:8   # separate kernel
 
-Reuses push.py's dataset push / wait; results land in outputs/pt03_kaggle/<draft>/.
+Reuses push.py's dataset push / wait; results land in outputs/pt03_kaggle/<draft><tag>/.
 """
 
 import argparse
@@ -22,8 +23,8 @@ SOURCES = {"a0": "rl-spec-decoding-bp09-1p7b", "15k6ep": "rl-spec-decoding-bp04-
 CONFIGS = "3:1:1,3:2:2,3:2:4,3:4:2,3:4:4"
 
 
-def push_kernel(user: str, src_slug: str, draft: str, n: int, configs: str) -> str:
-    kid = f"{user}/rl-spec-decoding-pt03-{draft}"
+def push_kernel(user: str, src_slug: str, draft: str, n: int, configs: str, tag: str = "") -> str:
+    kid = f"{user}/rl-spec-decoding-pt03-{draft}{tag}"
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
         env = {"PT03_DRAFT": draft, "PT03_N": str(n), "PT03_CONFIGS": configs}
@@ -39,8 +40,8 @@ def push_kernel(user: str, src_slug: str, draft: str, n: int, configs: str) -> s
     return kid
 
 
-def pull(kid: str, draft: str) -> None:
-    out = ROOT / "outputs" / "pt03_kaggle" / draft
+def pull(kid: str, draft: str, tag: str = "") -> None:
+    out = ROOT / "outputs" / "pt03_kaggle" / f"{draft}{tag}"
     shutil.rmtree(out, ignore_errors=True)
     out.mkdir(parents=True)
     with tempfile.TemporaryDirectory() as tmp:
@@ -62,13 +63,14 @@ def main() -> None:
     ap.add_argument("--user", required=True)
     ap.add_argument("-n", type=int, default=100, help="held-out requests")
     ap.add_argument("--configs", default=CONFIGS, help="comma-separated k:topk:beam")
+    ap.add_argument("--tag", default="", help="suffix for the kernel name and output folder, e.g. -depth")
     ap.add_argument("--pull-only", action="store_true")
     a = ap.parse_args()
-    kid = f"{a.user}/rl-spec-decoding-pt03-{a.draft}"
+    kid = f"{a.user}/rl-spec-decoding-pt03-{a.draft}{a.tag}"
     if not a.pull_only:
-        kid = push_kernel(a.user, push_source(a.user, tag="-pt03"), a.draft, a.n, a.configs)
+        kid = push_kernel(a.user, push_source(a.user, tag="-pt03"), a.draft, a.n, a.configs, a.tag)
         print("final:", wait(kid, poll=120))
-    pull(kid, a.draft)
+    pull(kid, a.draft, a.tag)
 
 
 if __name__ == "__main__":
