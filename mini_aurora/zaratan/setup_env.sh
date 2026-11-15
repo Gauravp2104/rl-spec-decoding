@@ -16,9 +16,9 @@ export UV_INSTALL_DIR="$SCRATCH/bin" UV_PYTHON_INSTALL_DIR="$SCRATCH/uv-python" 
 UV="$SCRATCH/bin/uv"
 [ -d "$VENV" ] || "$UV" venv --python 3.12 "$VENV"
 source "$VENV/bin/activate"
-"$UV" pip install -q torch==2.6.0 --extra-index-url https://download.pytorch.org/whl/cu124
+"$UV" pip install -q torch==2.7.1 --extra-index-url https://download.pytorch.org/whl/cu126   # >= 2.7: aurora sets dynamo.config.recompile_limit
 grep -v '^torch\|^#' mini_aurora/requirements-mac.txt | sed 's/#.*//' | xargs "$UV" pip install -q
-"$UV" pip install -q -e aurora-main --no-deps -e . --no-deps
+"$UV" pip install -q --no-deps -e aurora-main -e .
 
 mkdir -p "$SCRATCH/hf" "$SCRATCH/outputs"
 export HF_HOME="$SCRATCH/hf" WANDB_MODE=offline
