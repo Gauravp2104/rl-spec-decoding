@@ -1,6 +1,6 @@
 # PT-03 — Tree drafting on A0, A1 and the 0.6B 15K draft
 
-Status: **draft, waiting for B1 (PT-02).** Plan: [`../PLAN.md`](../PLAN.md), optional serve-only arm.
+Status: **draft, waiting for B1 (PT-02).** Main grid, CIs and depth done. Plan: [`../PLAN.md`](../PLAN.md), optional serve-only arm.
 
 **Question.** Does the self-distillation gain (PT-01, +0.154 τ̄ on a K = 3 chain) carry over when the draft proposes
 a tree instead of a chain, and how does the 1.7B target compare with the 0.6B target under the same tree settings?
@@ -59,12 +59,34 @@ Per-position acceptance α1 / α2 / α3 and T4 throughput (tok/s, fp32 target, s
 Serve time per setting: 24–37 min for the 1.7B drafts, 14–16 min for 0.6B; about 2.5 h per 1.7B draft and 1.3 h for
 0.6B on one Kaggle T4, no SU.
 
+## Depth (A0 and A1 only)
+
+#34 found on the 0.6B 9K draft that depth helps (chain K = 5 0.647 vs K = 3 0.623; K = 6 top-k 3 beam 8 1.078). The same
+three settings on the 1.7B drafts, same 100 requests, all lossless; CI as above:
+
+| draft | chain K = 3 | chain K = 5 | K = 3 top-k 4 beam 4 | K = 5 top-k 4 beam 4 | K = 6 top-k 3 beam 8 |
+|---|---|---|---|---|---|
+| A0 | 0.319 | 0.320 (0.301–0.341) | 0.533 | 0.539 (0.511–0.570) | 0.532 (0.502–0.565) |
+| A1 | 0.473 | 0.484 (0.457–0.511) | 0.744 | 0.773 (0.732–0.812) | 0.778 (0.734–0.819) |
+| tok/s A0 / A1 | 12.0 / 14.2 | 7.8 / 8.4 | 7.3 / 8.9 | 4.0 / 4.4 | 2.0 / 2.2 |
+
+- **Depth does not help the 1.7B drafts.** Chain K = 5 adds +0.001 (A0) and +0.011 (A1) over K = 3; the deeper
+  trees add at most +0.03 over K = 3 top-k 4 and the CIs overlap. Positions 4–6 accept almost nothing
+  (α4 0.007 / 0.024, α5 0.001 / 0.006 for A0 / A1), so the extra guesses are wasted.
+- **Throughput halves again**: K = 5 trees run at 4 tok/s and K = 6 at 2 tok/s on the T4, a third of K = 3 top-k 4.
+- The 0.6B 9K draft gained from depth because its α3 was already 0.08–0.11; the 1.7B drafts are at 0.03–0.07, so the
+  chain dies before depth 4. **K = 3 top-k 4 is the setting to carry forward for 1.7B** (and for B1 unless its α3 is
+  much higher).
+
+Files: `a0/` and `a1/` `results_depth.json` and `k5_*`, `k6_*` folders. Reproduce:
+`push_pt03 --user <u> {a0,a1} --tag=-depth --configs 5:1:1,5:4:4,6:3:8`.
+
 ## Caveats
 
 1. **B1 missing**: the plan's third tree arm is PT-02's 27K self-distilled 1.7B draft. The same runner serves it once
    #36 finishes (`push_pt03` needs a `b1` entry pointing at its checkpoint).
-2. **Depth fixed at 3**: #34 showed depth helps on the 0.6B 9K draft (chain K = 5 0.647 vs K = 3 0.623; K = 6 top-k 3
-   beam 8 reached 1.078). Deeper trees on the 1.7B drafts are not measured here.
+2. **Depth measured only on the 1.7B drafts** (section above); the 0.6B 15K draft's depth behaviour is assumed to
+   follow the 9K draft in #34.
 3. **Single seed, 100 requests**: the CIs above are over requests, not over training seeds.
 4. **Chat only**: no code / math out-of-domain serve.
 
