@@ -24,6 +24,8 @@ DUMP_SHARD_SIZE="${DUMP_SHARD_SIZE:-512}" # dump --shard-size: 2 files per 512 c
                                         # for the class scratch file quota; part of the dump's resume config too
 MAX_NEW_TOKENS="${MAX_NEW_TOKENS:-512}" # same as A1 (PT-01), so B1 - A1 is data scale only
 TREES="${TREES:-}"                      # non-empty -> eval also serves tree configs top-k / beam 2 and 4
+GRPO_TREE="${GRPO_TREE-6:3:8}"          # depth:top-k:beam of the tree baseline GRPO starts from (#34's best setting);
+                                        # every eval serves it on held-out chat. GRPO_TREE= (empty) skips it
 
 TEXT="$PT02/text"                                   # prepare: pool, parts, ShareGPT held-out pool (shared by runs)
 POOL="$TEXT/chat_27k.jsonl"                         # ~26.5K train rows + BP-04's 100 held-out rows, last
@@ -50,6 +52,7 @@ job_header() {  # print what the job runs on
   echo "== $SLURM_JOB_NAME ${SLURM_ARRAY_TASK_ID:+task $SLURM_ARRAY_TASK_ID }run=$RUN $(date)"
   nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null || true
   python -c "import torch; print('torch', torch.__version__, torch.version.cuda)"
+  echo "commit $(git -C "$REPO" rev-parse HEAD 2>/dev/null)"
 }
 
 job_footer() {

@@ -14,6 +14,7 @@
 #   AFTER=<jobid>          make the first submitted stage wait for this job
 #   EVALS="a1 b1"          which drafts to evaluate (default a1 b1, plus a0 when A0 is set)
 #   TREES=1                eval also serves tree configs (top-k / beam 2 and 4) on held-out chat
+#   GRPO_TREE=6:3:8        depth:top-k:beam of the GRPO baseline tree every eval serves (default); empty skips it
 #   GPU=h100:1 PART=...    other GPU type / partition (default a100:1 on gpu)
 #   DRY=1                  print the sbatch commands instead of submitting
 # Paths and the remaining knobs (PARTS, GEN_BATCH, EPOCHS, PT02, WORK ...) are in pt02_common.sh.
@@ -40,8 +41,8 @@ S=mini_aurora/zaratan
 GPU_ARGS=()
 [ -n "${GPU:-}" ] && GPU_ARGS+=(--gpus="$GPU")
 [ -n "${PART:-}" ] && GPU_ARGS+=(-p "$PART")
-if [ -n "$SMOKE" ]; then T_REGEN=0:30:00 T_DUMP=0:30:00 T_TRAIN=0:30:00 T_EVAL=0:45:00
-else T_REGEN=6:00:00 T_DUMP=8:00:00 T_TRAIN=16:00:00 T_EVAL=4:00:00; fi
+if [ -n "$SMOKE" ]; then T_REGEN=0:30:00 T_DUMP=0:30:00 T_TRAIN=0:30:00 T_EVAL=1:00:00
+else T_REGEN=6:00:00 T_DUMP=8:00:00 T_TRAIN=16:00:00 T_EVAL=6:00:00; fi
 
 submit() {  # walltime after-jobid log-pattern sbatch-args...
   local t=$1 after=$2 log=$3; shift 3
@@ -80,4 +81,5 @@ if [[ " $EVALS " == *" b1 "* ]] && runs eval; then
   echo "eval   $j  (b1)"
 fi
 echo "logs: $LOGS   outputs: $RUN_DIR"
+echo "after eval b1: ${SMOKE:+RUN=$RUN ALLOW_SMOKE=1 }bash mini_aurora/zaratan/pt02_release.sh stage, then ... publish"
 [ -n "${DRY:-}" ] || squeue -u "$USER" -o "%.10i %.28j %.8T %.10M %.6D %R"

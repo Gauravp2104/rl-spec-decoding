@@ -88,11 +88,15 @@ bash mini_aurora/zaratan/pt02_prepare.sh                 # login node, once: 27K
 SMOKE=1 bash mini_aurora/zaratan/submit_pt02.sh          # tiny end-to-end chain under $PT02/b1_smoke (~1 h of A100 in total)
 bash mini_aurora/zaratan/submit_pt02.sh                  # full chain
 DRY=1 bash mini_aurora/zaratan/submit_pt02.sh            # print the sbatch commands only
+bash mini_aurora/zaratan/pt02_release.sh stage           # after eval b1: check the run, stage release files + notes
+bash mini_aurora/zaratan/pt02_release.sh publish         # draft GitHub release pt02-b1-v1 (needs gh; see the script)
+gh release edit pt02-b1-v1 -R Gauravp2104/rl-spec-decoding --draft=false   # after reviewing it on GitHub
 ```
 
 ```
-pt02_regen.sbatch  (array 0-7, 6 h)  ──afterok──> pt02_dump.sbatch (8 h) ──afterok──> pt02_train.sbatch (16 h) ──> pt02_eval b1
+pt02_regen.sbatch  (array 0-7, 6 h)  ──afterok──> pt02_dump.sbatch (8 h) ──afterok──> pt02_train.sbatch (16 h) ──> pt02_eval b1 (6 h)
                                                                          └──afterok──> pt02_eval a1  (and a0 with A0=<BP-09 ckpt dir>)
+pt02_release.sh stage / publish   (login node, by hand, after pt02_eval b1)  ──> draft release pt02-b1-v1
 ```
 
 | job | does | outputs (`$PT02/b1/`) |
@@ -101,7 +105,8 @@ pt02_regen.sbatch  (array 0-7, 6 h)  ──afterok──> pt02_dump.sbatch (8 h)
 | `pt02_regen.sbatch` | `mini_aurora.data.regenerate` on one part: greedy, fp32, thinking off, ≤ 512 new tokens (as A1); resumable shards | `regen/part_NN.jsonl` |
 | `pt02_dump.sbatch` | merges the parts (row order checked, held-out rows last), whole-pool stats; dumps the self-distilled pool and the ShareGPT held-out rows, packed into shards of 512 conversations (~110 files in all) | `chat_27k_self_1p7b{.jsonl,.stats.json}`, `dump_self/`, `dump_sharegpt_heldout/heldout/` |
 | `pt02_train.sbatch` | BP-09 / A1 recipe, 4 epochs, seed 0; deletes `dump_self/train` when done | `checkpoints/` (+ `eval.json`, `train_log.csv`) |
-| `pt02_eval.sbatch` | teacher-forced acc on both held-out dumps; `serve --check` on held-out chat, 100 code and 100 math rows (τ̄, α_i, lossless, target-only tok/s); with `TREES=1`, tree configs 2 / 4 | `eval/<a1\|b1\|a0>/` |
+| `pt02_eval.sbatch` | teacher-forced acc on both held-out dumps; `serve --check` on held-out chat, 100 code and 100 math rows (τ̄, α_i, lossless, target-only tok/s); the **GRPO baseline tree** on held-out chat (`GRPO_TREE`, default K = 6 / top-k 3 / beam 8, #34's best setting; empty skips it); with `TREES=1`, K = 3 tree configs 2 / 4; `summary.json` over all serves | `eval/<a1\|b1\|a0>/` |
+| `pt02_release.sh` (login, by hand) | `stage`: refuses unless every serve is lossless, the GRPO tree was served and n = 100; copies the latest checkpoint, regenerated pool, train / eval outputs into `release/` with generated `NOTES.md` (B1 vs A1 table) and `SHA256SUMS`. `publish [dir]`: `gh release create --draft` at the commit that trained B1. No `gh` on Zaratan: rsync `release/` and publish from a local checkout | `release/` → release `pt02-b1-v1` |
 
 - **Resuming.** A timed-out regen task picks up at its last finished shard: run `FROM=regen` again, or
   `sbatch --array=<i> …`. A dump with a `manifest.json` is skipped; an interrupted dump resumes at its first unfinished shard (rerun `FROM=dump`). Training cannot resume, so delete

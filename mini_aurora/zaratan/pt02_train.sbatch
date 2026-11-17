@@ -18,6 +18,7 @@ job_header
 if [ -e "$CKPT/train_log.csv" ]; then echo "$CKPT already has a run; delete it to retrain"; exit 1; fi
 t0=$(date +%s)
 python -m mini_aurora.baseline.train --dump-dir "$DUMP" --out "$CKPT" --epochs "$EPOCHS" --seed "$SEED"
-echo "{\"train_s\": $(( $(date +%s) - t0 )), \"epochs\": $EPOCHS, \"seed\": $SEED}" | tee "$RUN_DIR/timings_train.json"
+echo "{\"train_s\": $(( $(date +%s) - t0 )), \"epochs\": $EPOCHS, \"seed\": $SEED, \"commit\": \"$(git -C "$REPO" rev-parse HEAD)\"}" \
+  | tee "$RUN_DIR/timings_train.json"
 [ -n "${KEEP_DUMP:-}" ] || rm -rf "$DUMP/train"
 job_footer
