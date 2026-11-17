@@ -6,7 +6,7 @@ from mini_aurora.models.vocab import coverage, load_vocab_mapping, save_vocab_ma
 
 
 def test_toy_mapping_roundtrip(tmp_path):
-    # docs/concepts/vocabulary.md toy example: target IDs 0, 1, 3, 5 kept.
+    # toy d2t / t2d example: target IDs 0, 1, 3, 5 kept.
     t2d = torch.zeros(10, dtype=torch.bool)
     t2d[[0, 1, 3, 5]] = True
     used = t2d.nonzero().squeeze(-1)

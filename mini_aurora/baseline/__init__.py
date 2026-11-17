@@ -5,7 +5,7 @@ features (``dump``), train the draft on that dump for a few epochs (``train``), 
 (``checkpoint``) and score it on held-out chat conversations (``evaluate``). The checkpoint is both the
 *static* baseline and the warm start for with-draft online training (BP-06).
 
-Needs Aurora, i.e. torch >= 2.3: Apple Silicon, CUDA, or the CPU container in ``mini_aurora/docker``.
+Needs Aurora, i.e. torch >= 2.3: Apple Silicon or CUDA.
 """
 
 DUMP_DIR = "outputs/baseline/hidden_states"

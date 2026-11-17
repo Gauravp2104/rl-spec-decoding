@@ -6,7 +6,7 @@
 Building, coverage and the ``{"d2t", "t2d", "meta"}`` file format live in ``mini_aurora.models.vocab`` (BP-03).
 The mapping is built from the **mixed** stream (all three domains): tokens outside the 24K can never be
 drafted, so a chat-only mapping would cap acceptance on the code and math segments of the shift stream
-(docs/concepts/vocabulary.md). ``--compare`` prints the numbers behind that choice.
+(docs/concepts/speculative_decoding.md, draft vocab). ``--compare`` prints the numbers behind that choice.
 """
 
 import argparse

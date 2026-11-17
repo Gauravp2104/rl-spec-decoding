@@ -1,7 +1,7 @@
 """BP-02: public data subsets, request streams and the cached draft vocab mapping.
 
 Pure-Python modules (``download``, ``streams``) run anywhere; ``vocab`` needs Aurora, i.e. torch >= 2.3
-(Apple Silicon, CUDA, or the Linux CPU container in ``mini_aurora/docker``).
+(Apple Silicon or CUDA).
 """
 
 DOMAINS = ("chat", "code", "math")
