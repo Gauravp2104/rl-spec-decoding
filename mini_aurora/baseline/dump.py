@@ -2,8 +2,10 @@
 
     python -m mini_aurora.baseline.dump                       # data/raw/chat.jsonl -> outputs/baseline/hidden_states/{train,heldout}/
     python -m mini_aurora.baseline.dump --limit 20            # smoke test on 20 conversations
+    python -m mini_aurora.baseline.dump --shard-size 512      # packed: 2 files per 512 conversations (file quotas)
 
-One file per conversation, with the keys Aurora's ``OfflineEagle3Dataset`` expects:
+By default one file per conversation, with the keys Aurora's ``OfflineEagle3Dataset`` expects (``--shard-size``
+packs the same tensors into shards, ``mini_aurora.baseline.shards``; ``DumpDataset`` reads either layout):
 
 | key | shape | meaning |
 |---|---|---|
@@ -24,6 +26,7 @@ from pathlib import Path
 import torch
 
 from mini_aurora.baseline import DUMP_DIR, DUMP_DTYPE, HELDOUT
+from mini_aurora.baseline.shards import ShardWriter, shard_paths
 from mini_aurora.data.download import read_jsonl
 from mini_aurora.device import get_device
 from mini_aurora.models.target import capture_features, load_target, load_tokenizer
@@ -56,8 +59,48 @@ def dump_conversation(target, tokenizer, messages: list, device: torch.device, d
     }
 
 
+def _dump_files(target, tokenizer, rows: list, split_dir: Path, device, dtype) -> dict:
+    """One ``<id>.ckpt`` per conversation."""
+    n_tokens = n_assistant = skipped = 0
+    for r in rows:
+        item = dump_conversation(target, tokenizer, r["messages"], device, dtype)
+        if item is None:
+            skipped += 1
+            continue
+        torch.save(item, split_dir / f"{r['id']}.ckpt")
+        n_tokens += item["input_ids"].numel()
+        n_assistant += int(item["loss_mask"].sum())
+    return {"conversations": len(rows) - skipped, "skipped": skipped, "tokens": n_tokens, "assistant_tokens": n_assistant}
+
+
+def _dump_shards(target, tokenizer, rows: list, split_dir: Path, device, dtype, shard_size: int) -> dict:
+    """``shard_size`` conversations per shard (``mini_aurora.baseline.shards``); complete shards are kept, so an
+    interrupted dump resumes at the first unfinished shard."""
+    totals = {"conversations": 0, "skipped": 0, "tokens": 0, "assistant_tokens": 0, "shards": 0, "resumed_shards": 0}
+    for k in range(-(-len(rows) // shard_size)):
+        chunk = rows[k * shard_size : (k + 1) * shard_size]
+        _, idx_path = shard_paths(split_dir, k)
+        if idx_path.exists():
+            index = torch.load(idx_path, map_location="cpu", weights_only=False)
+            kept = set(index["ids"])  # skipped rows (no assistant tokens) are absent from the index
+            if index["ids"] != [r["id"] for r in chunk if r["id"] in kept] or len(kept) + index["skipped"] != len(chunk):
+                raise ValueError(f"{idx_path} was written from different rows (or --shard-size); delete the dump")
+            totals["resumed_shards"] += 1
+        else:
+            writer = ShardWriter(split_dir, k, dtype)
+            for r in chunk:
+                writer.add(r["id"], dump_conversation(target, tokenizer, r["messages"], device, dtype))
+            index = writer.close()
+        totals["conversations"] += len(index["ids"])
+        totals["skipped"] += index["skipped"]
+        totals["tokens"] += index["tokens"]
+        totals["assistant_tokens"] += index["assistant_tokens"]
+        totals["shards"] += 1
+    return totals
+
+
 def run_dump(jsonl: str, out_dir: str, heldout: int, limit: int | None, dtype: torch.dtype,
-             device: torch.device | None = None) -> dict:
+             device: torch.device | None = None, shard_size: int | None = None) -> dict:
     device = device or get_device()
     rows = read_jsonl(Path(jsonl))
     if limit:
@@ -66,25 +109,20 @@ def run_dump(jsonl: str, out_dir: str, heldout: int, limit: int | None, dtype: t
     target, tokenizer = load_target(device=device), load_tokenizer()
     out = Path(out_dir)
     manifest = {"source": jsonl, "dtype": str(dtype).split(".")[-1], "model": target.model.config._name_or_path,
-                "aux_layers": target.aux_hidden_states_layers, "splits": {}}
+                "aux_layers": target.aux_hidden_states_layers, "layout": f"shards of {shard_size}" if shard_size else "files",
+                "splits": {}}
     for split, split_rows_ in splits.items():
-        (out / split).mkdir(parents=True, exist_ok=True)
-        n_tokens = n_assistant = skipped = 0
+        split_dir = out / split
+        split_dir.mkdir(parents=True, exist_ok=True)
         start = time.perf_counter()
-        for r in split_rows_:
-            item = dump_conversation(target, tokenizer, r["messages"], device, dtype)
-            if item is None:
-                skipped += 1
-                continue
-            torch.save(item, out / split / f"{r['id']}.ckpt")
-            n_tokens += item["input_ids"].numel()
-            n_assistant += int(item["loss_mask"].sum())
+        if shard_size:
+            stats = _dump_shards(target, tokenizer, split_rows_, split_dir, device, dtype, shard_size)
+        else:
+            stats = _dump_files(target, tokenizer, split_rows_, split_dir, device, dtype)
         seconds = time.perf_counter() - start
-        manifest["splits"][split] = {"conversations": len(split_rows_) - skipped, "skipped": skipped,
-                                     "tokens": n_tokens, "assistant_tokens": n_assistant,
-                                     "seconds": round(seconds, 1)}
-        print(f"{split}: {len(split_rows_) - skipped} conversations, {n_tokens} tokens "
-              f"({n_assistant} assistant), {seconds:.0f}s -> {out / split}")
+        manifest["splits"][split] = {**stats, "seconds": round(seconds, 1)}
+        print(f"{split}: {stats['conversations']} conversations, {stats['tokens']} tokens "
+              f"({stats['assistant_tokens']} assistant), {seconds:.0f}s -> {split_dir}")
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2))
     return manifest
 
@@ -97,8 +135,11 @@ def main() -> None:
     p.add_argument("--limit", type=int, default=None, help="only the first N rows (smoke test)")
     p.add_argument("--dtype", default=DUMP_DTYPE, choices=["bfloat16", "float16", "float32"])
     p.add_argument("--device", default=None)
+    p.add_argument("--shard-size", type=int, default=None,
+                   help="pack N conversations per shard (2 files each) instead of one .ckpt per conversation; resumable")
     args = p.parse_args()
-    run_dump(args.jsonl, args.out, args.heldout, args.limit, getattr(torch, args.dtype), get_device(args.device))
+    run_dump(args.jsonl, args.out, args.heldout, args.limit, getattr(torch, args.dtype), get_device(args.device),
+             args.shard_size)
 
 
 if __name__ == "__main__":
