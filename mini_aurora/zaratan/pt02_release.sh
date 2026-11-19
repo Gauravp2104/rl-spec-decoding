@@ -16,12 +16,12 @@
 #   rsync -av zaratan:scratch.msai635/rl-spec-decoding/pt02/b1/release/ outputs/pt02_b1_release/
 #   bash mini_aurora/zaratan/pt02_release.sh publish outputs/pt02_b1_release
 #
-# Options (environment): PT02, RUN (default b1; b1_smoke stages the smoke run for a dry check), TAG (pt02-b1-v1),
+# Options (environment): LOCAL=1 (run made with LOCAL=1: PT02 defaults to ~/rl-work/pt02), PT02, RUN (default b1; b1_smoke stages the smoke run for a dry check), TAG (pt02-b1-v1),
 # GH_REPO (Gauravp2104/rl-spec-decoding), ALLOW_SMOKE=1 (stage/publish a run with < 100 requests), DRY=1 (publish:
 # print the gh command only).
 set -eo pipefail
 cd "$(dirname "$0")/../.."
-PT02="${PT02:-$HOME/scratch.msai635/rl-spec-decoding/pt02}"
+if [ -n "${LOCAL:-}" ]; then PT02="${PT02:-$HOME/rl-work/pt02}"; else PT02="${PT02:-$HOME/scratch.msai635/rl-spec-decoding/pt02}"; fi
 RUN="${RUN:-b1}"
 RUN_DIR="$PT02/$RUN"
 TAG="${TAG:-pt02-b1-v1}"

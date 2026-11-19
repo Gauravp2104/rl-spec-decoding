@@ -26,8 +26,10 @@ mkdir -p "$OUT"
 echo "draft $CK -> $OUT"
 
 t0=$(date +%s)
-python -m mini_aurora.baseline.evaluate --dump-dir "$DUMP" --ckpt "$CK" --out "$OUT/evaluate_self_heldout.json"
-python -m mini_aurora.baseline.evaluate --dump-dir "$DUMP_SG" --ckpt "$CK" --out "$OUT/evaluate_sharegpt_heldout.json"
+if [ -z "$LOCAL" ]; then   # LOCAL: the dumps only existed inside pt02_build, which wrote these two files
+  python -m mini_aurora.baseline.evaluate --dump-dir "$DUMP" --ckpt "$CK" --out "$OUT/evaluate_self_heldout.json"
+  python -m mini_aurora.baseline.evaluate --dump-dir "$DUMP_SG" --ckpt "$CK" --out "$OUT/evaluate_sharegpt_heldout.json"
+fi
 t1=$(date +%s)
 
 serve() {  # tag serve-args...
