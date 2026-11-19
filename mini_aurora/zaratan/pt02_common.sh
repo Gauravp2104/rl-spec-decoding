@@ -52,6 +52,7 @@ if [ -n "$LOCAL" ]; then
   CKPT_WORK="$NODE_TMP/checkpoints"
   HF_DIR="${TMPDIR:-/tmp}/$USER-hf"                 # per node; each job downloads what it needs
   HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
+  export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"  # compute nodes cannot reach the Xet CAS server
 fi
 
 export HF_HOME="$HF_DIR" HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" WANDB_MODE=offline TOKENIZERS_PARALLELISM=false
