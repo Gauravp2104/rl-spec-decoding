@@ -55,9 +55,15 @@ REL=https://github.com/Gauravp2104/rl-spec-decoding/releases/download/pt01-a1-v1
 for f in draft_step000896.pt draft_step000896.json latest.txt; do
   [ -s "$A1_DIR/$f" ] || curl -fsSL -o "$A1_DIR/$f" "$REL/$f"
 done
-python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen3-1.7B', allow_patterns=['*.json','*.safetensors','*.txt']))"
-
-echo "== disk: the self-distilled dump needs ~240 GB (bf16, ~16 KB per token) under $PT02"
-df -h "$PT02" || true
-beegfs-ctl --getquota --gid zt-msai635 2>/dev/null || true
+if [ -n "$LOCAL" ]; then
+  # into $WORK/hf (~4 GB of home), which the jobs then read offline (pt02_common.sh): GPU nodes may not reach HF's CDN
+  HF_HOME="$WORK/hf" python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen3-1.7B', allow_patterns=['*.json','*.safetensors','*.txt']))"
+  echo "== LOCAL: Qwen3-1.7B in $WORK/hf (read offline by the jobs); dumps live on the node's \$TMPDIR"
+  echo "== home usage (hard limit 10 GB; this run adds ~3 GB under $PT02):"; du -sh "$HOME" 2>/dev/null || true
+else
+  python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen3-1.7B', allow_patterns=['*.json','*.safetensors','*.txt']))"
+  echo "== disk: the self-distilled dump needs ~240 GB (bf16, ~16 KB per token) under $PT02"
+  df -h "$PT02" || true
+  beegfs-ctl --getquota --gid zt-msai635 2>/dev/null || true
+fi
 echo "prepare done: $(ls "$TEXT"/parts/part_*.jsonl | wc -l) parts in $TEXT/parts; next: bash mini_aurora/zaratan/submit_pt02.sh"

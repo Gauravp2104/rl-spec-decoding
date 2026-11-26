@@ -108,6 +108,12 @@ pt02_release.sh stage / publish   (login node, by hand, after pt02_eval b1)  ─
 | `pt02_eval.sbatch` | teacher-forced acc on both held-out dumps; `serve --check` on held-out chat, 100 code and 100 math rows (τ̄, α_i, lossless, target-only tok/s); the **GRPO baseline tree** on held-out chat (`GRPO_TREE`, default K = 6 / top-k 3 / beam 8, #34's best setting; empty skips it); with `TREES=1`, K = 3 tree configs 2 / 4; `summary.json` over all serves | `eval/<a1\|b1\|a0>/` |
 | `pt02_release.sh` (login, by hand) | `stage`: refuses unless every serve is lossless, the GRPO tree was served and n = 100; copies the latest checkpoint, regenerated pool, train / eval outputs into `release/` with generated `NOTES.md` (B1 vs A1 table) and `SHA256SUMS`. `publish [dir]`: `gh release create --draft` at the commit that trained B1. No `gh` on Zaratan: rsync `release/` and publish from a local checkout | `release/` → release `pt02-b1-v1` |
 
+- **No course scratch (`LOCAL=1`).** When `zt-msai635` scratch is over quota, prefix prepare, submit and release
+  with `LOCAL=1`. Persistent outputs go to `~/rl-work/pt02` (home, ~3 GB), Qwen3-1.7B is downloaded per job into the
+  node's `$TMPDIR` (12 TB local disk on the A100 nodes; compute nodes need internet), and `pt02_build.sbatch` runs
+  merge + dump + train + teacher-forced acc in one ≤ 20 h job on that disk, keeping only the final checkpoint.
+  `pt02_eval` then only serves. A failed build restarts from the dump (`rm -rf ~/rl-work/pt02/b1/checkpoints`,
+  `LOCAL=1 FROM=dump`).
 - **Resuming.** A timed-out regen task picks up at its last finished shard: run `FROM=regen` again, or
   `sbatch --array=<i> …`. A dump with a `manifest.json` is skipped; an interrupted dump resumes at its first unfinished shard (rerun `FROM=dump`). Training cannot resume, so delete
   `checkpoints/` and run `FROM=train`. `FROM=eval EVALS=b1` reruns one evaluation. `AFTER=<jobid>` makes the

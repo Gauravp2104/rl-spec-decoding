@@ -5,11 +5,15 @@
 #   WORK   venv, repo clone, HF cache (docs/zaratan_setup.md layout; home, ~8 GB)
 #   PT02   text pools, regenerated data, feature dumps (~240 GB), checkpoints, eval results (course scratch)
 #   SMOKE  non-empty -> tiny end-to-end run under $PT02/b1_smoke (LIMIT rows per part, 1 epoch, 5 requests)
+#   LOCAL  non-empty -> no course scratch: PT02 defaults to $WORK/pt02 (home, ~3 GB), the feature dumps and
+#          per-epoch checkpoints live on the GPU node's local disk ($TMPDIR, wiped when the job ends) inside one
+#          pt02_build job, and every job downloads Qwen3-1.7B into $TMPDIR (needs internet on compute nodes)
 
 WORK="${WORK:-$HOME/rl-work}"
 REPO="${REPO:-${SLURM_SUBMIT_DIR:-$WORK/repo}}"
 VENV="${VENV:-$WORK/venv}"
-PT02="${PT02:-$HOME/scratch.msai635/rl-spec-decoding/pt02}"
+LOCAL="${LOCAL:-}"
+if [ -n "$LOCAL" ]; then PT02="${PT02:-$WORK/pt02}"; else PT02="${PT02:-$HOME/scratch.msai635/rl-spec-decoding/pt02}"; fi
 
 if [ -n "${SMOKE:-}" ]; then
   RUN="${RUN:-b1_smoke}"; LIMIT="${LIMIT:-8}"; EPOCHS="${EPOCHS:-1}"; N_SERVE="${N_SERVE:-5}"
@@ -36,11 +40,27 @@ REGEN="$RUN_DIR/regen"                              # one regenerated jsonl (+ r
 SELF_POOL="$RUN_DIR/chat_27k_self_1p7b.jsonl"       # merged regenerated pool
 DUMP="$RUN_DIR/dump_self"                           # B1 features; train/ is deleted after training
 DUMP_SG="$RUN_DIR/dump_sharegpt_heldout"            # ShareGPT held-out features (heldout/ only)
-CKPT="$RUN_DIR/checkpoints"
+CKPT="$RUN_DIR/checkpoints"                         # persistent; in LOCAL mode only the final checkpoint
+CKPT_WORK="$CKPT"                                   # where train.py writes (node-local in LOCAL mode)
 EVAL="$RUN_DIR/eval"
 LOGS="$RUN_DIR/logs"
+HF_DIR="$WORK/hf"
+if [ -n "$LOCAL" ]; then
+  NODE_TMP="${TMPDIR:-/tmp}/$USER-pt02/${SLURM_JOB_ID:-login}"
+  DUMP="$NODE_TMP/dump_self"
+  DUMP_SG="$NODE_TMP/dump_sharegpt_heldout"
+  CKPT_WORK="$NODE_TMP/checkpoints"
+  if [ -d "$WORK/hf/hub/models--Qwen--Qwen3-1.7B/snapshots" ]; then
+    HF_DIR="$WORK/hf"                               # pre-downloaded on the login node (pt02_prepare.sh): read offline,
+                                                    # because some GPU nodes (e.g. the H100s) cannot reach HF's CDN
+  else
+    HF_DIR="${TMPDIR:-/tmp}/$USER-hf"               # per node; each job downloads what it needs
+    HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
+    export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"  # compute nodes cannot reach the Xet CAS server
+  fi
+fi
 
-export HF_HOME="$WORK/hf" HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" WANDB_MODE=offline TOKENIZERS_PARALLELISM=false
+export HF_HOME="$HF_DIR" HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" WANDB_MODE=offline TOKENIZERS_PARALLELISM=false
 export MINI_AURORA_DEVICE="${MINI_AURORA_DEVICE:-cuda}" PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export MINI_AURORA_TARGET="Qwen/Qwen3-1.7B"
 export MINI_AURORA_DRAFT_CONFIG="$REPO/examples/zaratan-qwen3-1.7b/draft_config.json"

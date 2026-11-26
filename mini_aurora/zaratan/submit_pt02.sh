@@ -17,16 +17,19 @@
 #   GRPO_TREE=6:3:8        depth:top-k:beam of the GRPO baseline tree every eval serves (default); empty skips it
 #   GPU=h100:1 PART=...    other GPU type / partition (default a100:1 on gpu)
 #   DRY=1                  print the sbatch commands instead of submitting
+#   LOCAL=1                no course scratch: regen ──> pt02_build (dump + train + teacher-forced acc on the GPU node's
+#                          local disk, one job) ──> eval a1 / b1 (serve only); outputs in ~/rl-work/pt02 (pt02_common.sh)
 # Paths and the remaining knobs (PARTS, GEN_BATCH, EPOCHS, PT02, WORK ...) are in pt02_common.sh.
 set -eo pipefail
 cd "$(dirname "$0")/../.."
 export REPO="$PWD"
 source mini_aurora/zaratan/pt02_common.sh
-export SMOKE TREES   # the jobs re-source pt02_common.sh and derive the same RUN / LIMIT / paths
+export SMOKE TREES LOCAL   # the jobs re-source pt02_common.sh and derive the same RUN / LIMIT / paths
 
 FROM="${FROM:-regen}"
 A0="${A0:-}"
 EVALS="${EVALS:-a1 b1${A0:+ a0}}"
+export EVALS A0   # pt02_build (LOCAL) runs the teacher-forced acc for each
 order() { case $1 in regen) echo 1 ;; dump) echo 2 ;; train) echo 3 ;; eval) echo 4 ;; *) echo 0 ;; esac; }
 [ "$(order "$FROM")" -gt 0 ] || { echo "FROM must be regen, dump, train or eval"; exit 1; }
 runs() { [ "$(order "$1")" -ge "$(order "$FROM")" ]; }
@@ -41,8 +44,8 @@ S=mini_aurora/zaratan
 GPU_ARGS=()
 [ -n "${GPU:-}" ] && GPU_ARGS+=(--gpus="$GPU")
 [ -n "${PART:-}" ] && GPU_ARGS+=(-p "$PART")
-if [ -n "$SMOKE" ]; then T_REGEN=0:30:00 T_DUMP=0:30:00 T_TRAIN=0:30:00 T_EVAL=1:00:00
-else T_REGEN=6:00:00 T_DUMP=8:00:00 T_TRAIN=16:00:00 T_EVAL=6:00:00; fi
+if [ -n "$SMOKE" ]; then T_REGEN=0:30:00 T_DUMP=0:30:00 T_TRAIN=0:30:00 T_EVAL=1:00:00 T_BUILD=1:30:00
+else T_REGEN=6:00:00 T_DUMP=8:00:00 T_TRAIN=16:00:00 T_EVAL=6:00:00 T_BUILD=20:00:00; fi
 
 submit() {  # walltime after-jobid log-pattern sbatch-args...
   local t=$1 after=$2 log=$3; shift 3
@@ -55,30 +58,45 @@ if runs regen; then
   prev=$(submit "$T_REGEN" "$prev" '%x-%A_%a.out' --array=0-$((n_parts - 1)) -J "pt02-regen$SFX" "$S/pt02_regen.sbatch")
   echo "regen  $prev  ($n_parts tasks)"
 fi
-if runs dump; then
-  prev=$(submit "$T_DUMP" "$prev" '%x-%j.out' -J "pt02-dump$SFX" "$S/pt02_dump.sbatch")
-  echo "dump   $prev"
-fi
-dumped="$prev"
-for name in $EVALS; do
-  case $name in
-    a1) draft="$A1_DIR" ;;
-    a0) draft="${A0:?A0=<BP-09 checkpoint dir> needed for a0}" ;;
-    b1) continue ;;
-    *) echo "unknown eval $name"; exit 1 ;;
-  esac
-  if runs eval; then
-    j=$(submit "$T_EVAL" "$dumped" '%x-%j.out' -J "pt02-eval-$name$SFX" --export="ALL,NAME=$name,DRAFT=$draft" "$S/pt02_eval.sbatch")
-    echo "eval   $j  ($name)"
+if [ -n "$LOCAL" ]; then
+  # dump and train share the node-local disk, so they are one job; FROM=dump and FROM=train both restart it
+  if runs train; then
+    prev=$(submit "$T_BUILD" "$prev" '%x-%j.out' -J "pt02-build$SFX" "$S/pt02_build.sbatch")
+    echo "build  $prev  (dump + train + teacher-forced acc on node-local disk)"
   fi
-done
-if runs train; then
-  prev=$(submit "$T_TRAIN" "$prev" '%x-%j.out' -J "pt02-train$SFX" "$S/pt02_train.sbatch")
-  echo "train  $prev"
-fi
-if [[ " $EVALS " == *" b1 "* ]] && runs eval; then
-  j=$(submit "$T_EVAL" "$prev" '%x-%j.out' -J "pt02-eval-b1$SFX" --export="ALL,NAME=b1,DRAFT=$CKPT" "$S/pt02_eval.sbatch")
-  echo "eval   $j  (b1)"
+  for name in $EVALS; do
+    case $name in a1) draft="$A1_DIR" ;; b1) draft="$CKPT" ;; a0) draft="${A0:?}" ;; *) echo "unknown eval $name"; exit 1 ;; esac
+    if runs eval; then
+      j=$(submit "$T_EVAL" "$prev" '%x-%j.out' -J "pt02-eval-$name$SFX" --export="ALL,NAME=$name,DRAFT=$draft" "$S/pt02_eval.sbatch")
+      echo "eval   $j  ($name, serve only)"
+    fi
+  done
+else
+  if runs dump; then
+    prev=$(submit "$T_DUMP" "$prev" '%x-%j.out' -J "pt02-dump$SFX" "$S/pt02_dump.sbatch")
+    echo "dump   $prev"
+  fi
+  dumped="$prev"
+  for name in $EVALS; do
+    case $name in
+      a1) draft="$A1_DIR" ;;
+      a0) draft="${A0:?A0=<BP-09 checkpoint dir> needed for a0}" ;;
+      b1) continue ;;
+      *) echo "unknown eval $name"; exit 1 ;;
+    esac
+    if runs eval; then
+      j=$(submit "$T_EVAL" "$dumped" '%x-%j.out' -J "pt02-eval-$name$SFX" --export="ALL,NAME=$name,DRAFT=$draft" "$S/pt02_eval.sbatch")
+      echo "eval   $j  ($name)"
+    fi
+  done
+  if runs train; then
+    prev=$(submit "$T_TRAIN" "$prev" '%x-%j.out' -J "pt02-train$SFX" "$S/pt02_train.sbatch")
+    echo "train  $prev"
+  fi
+  if [[ " $EVALS " == *" b1 "* ]] && runs eval; then
+    j=$(submit "$T_EVAL" "$prev" '%x-%j.out' -J "pt02-eval-b1$SFX" --export="ALL,NAME=b1,DRAFT=$CKPT" "$S/pt02_eval.sbatch")
+    echo "eval   $j  (b1)"
+  fi
 fi
 echo "logs: $LOGS   outputs: $RUN_DIR"
 echo "after eval b1: ${SMOKE:+RUN=$RUN ALLOW_SMOKE=1 }bash mini_aurora/zaratan/pt02_release.sh stage, then ... publish"

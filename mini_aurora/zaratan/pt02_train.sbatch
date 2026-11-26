@@ -17,7 +17,12 @@ source "${REPO:-$SLURM_SUBMIT_DIR}/mini_aurora/zaratan/pt02_common.sh"
 job_header
 if [ -e "$CKPT/train_log.csv" ]; then echo "$CKPT already has a run; delete it to retrain"; exit 1; fi
 t0=$(date +%s)
-python -m mini_aurora.baseline.train --dump-dir "$DUMP" --out "$CKPT" --epochs "$EPOCHS" --seed "$SEED"
+python -m mini_aurora.baseline.train --dump-dir "$DUMP" --out "$CKPT_WORK" --epochs "$EPOCHS" --seed "$SEED"
+if [ "$CKPT_WORK" != "$CKPT" ]; then   # LOCAL: keep only the final checkpoint (+ logs) off the node
+  step=$(printf '%06d' "$(cat "$CKPT_WORK/latest.txt")")
+  mkdir -p "$CKPT"
+  cp "$CKPT_WORK"/{latest.txt,eval.json,train_log.csv} "$CKPT_WORK/draft_step$step".{pt,json} "$CKPT/"
+fi
 echo "{\"train_s\": $(( $(date +%s) - t0 )), \"epochs\": $EPOCHS, \"seed\": $SEED, \"commit\": \"$(git -C "$REPO" rev-parse HEAD)\"}" \
   | tee "$RUN_DIR/timings_train.json"
 [ -n "${KEEP_DUMP:-}" ] || rm -rf "$DUMP/train"
