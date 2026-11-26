@@ -41,12 +41,21 @@ stage() {
   cp "$ev"/summary.json "$ev"/evaluate_self_heldout.json "$ev"/evaluate_sharegpt_heldout.json "$ev"/serve_*.jsonl "$out/"
   for f in "$ev"/serve_*.txt; do [ -e "$f" ] && cp "$f" "$out/"; done
   local a1="$RUN_DIR/eval/a1/summary.json"
-  python3 - "$out" "$step" "$TAG" "${ALLOW_SMOKE:-}" "$([ -s "$a1" ] && echo "$a1")" <<'PY'
+  # GPU names from the job logs (first nvidia-smi line): the notes must not assume a GPU type
+  local train_log eval_log train_gpu serve_gpu
+  train_log=$(ls -t "$RUN_DIR"/logs/pt02-build-*.out "$RUN_DIR"/logs/pt02-train-*.out 2>/dev/null | grep -v smoke | head -1 || true)
+  eval_log=$(ls -t "$RUN_DIR"/logs/pt02-eval-b1-*.out 2>/dev/null | grep -v smoke | head -1 || true)
+  train_gpu=$( [ -n "$train_log" ] && grep -m1 '^NVIDIA' "$train_log" | cut -d, -f1 || true)
+  serve_gpu=$( [ -n "$eval_log" ] && grep -m1 '^NVIDIA' "$eval_log" | cut -d, -f1 || true)
+  python3 - "$out" "$step" "$TAG" "${ALLOW_SMOKE:-}" "$([ -s "$a1" ] && echo "$a1")" "${train_gpu:-unknown GPU}" "${serve_gpu:-unknown GPU}" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 out, step, tag, allow_smoke, a1_path = Path(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
+train_gpu, serve_gpu = sys.argv[6], sys.argv[7]
+# no str.removeprefix / removesuffix: this runs on the login node's system python3 (< 3.9)
+strip = lambda s, pre: s[len(pre):] if s.startswith(pre) else s
 load = lambda name: json.loads((out / name).read_text())
 summary, stats, train = load("summary.json"), load("chat_27k_self_1p7b.stats.json"), load("timings_train.json")
 a1 = json.loads(Path(a1_path).read_text()) if a1_path else {}
@@ -67,9 +76,9 @@ def label(key):
     if key in ("code", "math"):
         return f"{key} (out of domain), chain K = 3"
     if key.startswith("heldout_tree"):
-        t = key.removeprefix("heldout_tree")
+        t = strip(key, "heldout_tree")
         return f"held-out chat, tree K = 3, top-k {t}, beam {t}"
-    d, t, b = key.removeprefix("heldout_k").replace("_topk", " ").replace("_beam", " ").split()
+    d, t, b = strip(key, "heldout_k").replace("_topk", " ").replace("_beam", " ").split()
     return f"held-out chat, tree K = {d}, top-k {t}, beam {b} (**GRPO baseline**)"
 
 order = ["heldout", *grpo, *sorted(k for k in summary if k.startswith("heldout_tree")), "code", "math"]
@@ -91,13 +100,13 @@ per turn; `mini_aurora/data/regenerate.py`, the PT-01 settings). The 100 BP-04 h
 {stats['assistant_tokens_generated']:,} generated assistant tokens, hit-cap rate {stats['hit_cap_rate']}, \
 looped rate {stats['looped_rate']}
 - training: BP-09 / A1 recipe (`examples/zaratan-qwen3-1.7b/draft_config.json`, 24K vocab `qwen3_24k_mixed`, fp32 + \
-gradient checkpointing), {train['epochs']} epochs = {step} steps, seed {train['seed']}, Zaratan A100, \
+gradient checkpointing), {train['epochs']} epochs = {step} steps, seed {train['seed']}, Zaratan {train_gpu}, \
 {train['train_s'] / 3600:.1f} h; commit `{train.get('commit', '?')}`
 
-**GRPO baseline: τ̄ {g['tau']:.3f}** on held-out chat at {label(grpo[0]).split(', ', 1)[1].removesuffix(' (**GRPO baseline**)')}, \
+**GRPO baseline: τ̄ {g['tau']:.3f}** on held-out chat at {label(grpo[0]).split(', ', 1)[1].replace(' (**GRPO baseline**)', '')}, \
 {g['matches']} lossless.
 
-Serve results (greedy, 128 new tokens, fp32, A100; A1 = release `pt01-a1-v1` on the same harness):
+Serve results (greedy, 128 new tokens, fp32, {serve_gpu}; A1 = release `pt01-a1-v1` on the same harness):
 
 | setting | τ̄ B1 | τ̄ A1 | α1 / α2 / … (B1) | tok/s | lossless |
 |---|---|---|---|---|---|
@@ -129,9 +138,10 @@ publish() {
   [ -s "$dir/NOTES.md" ] && [ -s "$dir/SHA256SUMS" ] || { echo "$dir is not staged: run '$0 stage' first"; exit 1; }
   (cd "$dir" && shasum -a 256 -c --quiet SHA256SUMS) || { echo "checksum mismatch in $dir"; exit 1; }
   local commit; commit=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('commit',''))" "$dir/timings_train.json")
+  local n_train; n_train=$(python3 -c "import json,sys; print(f\"{json.load(open(sys.argv[1]))['conversations'] - 100:,}\")" "$dir/chat_27k_self_1p7b.stats.json")
   local files=(); while IFS= read -r f; do files+=("$dir/$f"); done < <(ls "$dir" | grep -v '^NOTES.md$')
   local cmd=(gh release create "$TAG" -R "$GH_REPO" --draft --notes-file "$dir/NOTES.md"
-             --title "PT-02 B1: self-distilled Qwen3-1.7B draft, ~26.5K conversations" ${commit:+--target "$commit"} "${files[@]}")
+             --title "PT-02 B1: self-distilled Qwen3-1.7B draft, $n_train conversations" ${commit:+--target "$commit"} "${files[@]}")
   if [ -n "${DRY:-}" ]; then printf '%q ' "${cmd[@]}"; echo; return; fi
   command -v gh >/dev/null || { echo "gh not found: rsync $dir to a machine with gh (see the header)"; exit 1; }
   "${cmd[@]}"
