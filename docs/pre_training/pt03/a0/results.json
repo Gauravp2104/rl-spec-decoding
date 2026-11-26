@@ -1,0 +1,158 @@
+{
+  "draft": "a0",
+  "step": 896,
+  "target": "Qwen/Qwen3-1.7B",
+  "n": 100,
+  "configs": [
+    {
+      "label": "k3_topk1_beam1",
+      "k": 3,
+      "tree_topk": 1,
+      "tree_beam": 1,
+      "serve_s": 1667.6,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.319,
+        "alpha": [
+          0.244,
+          0.059,
+          0.015
+        ],
+        "tokens_per_s": 12.0,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.319,
+        "alpha": [
+          0.244,
+          0.059,
+          0.015
+        ],
+        "tokens_per_s": 12.0,
+        "matches": "100/100"
+      }
+    },
+    {
+      "label": "k3_topk2_beam2",
+      "k": 3,
+      "tree_topk": 2,
+      "tree_beam": 2,
+      "serve_s": 1874.5,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.43,
+        "alpha": [
+          0.318,
+          0.088,
+          0.023
+        ],
+        "tokens_per_s": 9.4,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.43,
+        "alpha": [
+          0.318,
+          0.088,
+          0.023
+        ],
+        "tokens_per_s": 9.4,
+        "matches": "100/100"
+      }
+    },
+    {
+      "label": "k3_topk2_beam4",
+      "k": 3,
+      "tree_topk": 2,
+      "tree_beam": 4,
+      "serve_s": 2209.8,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.445,
+        "alpha": [
+          0.316,
+          0.1,
+          0.029
+        ],
+        "tokens_per_s": 7.5,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.445,
+        "alpha": [
+          0.316,
+          0.1,
+          0.029
+        ],
+        "tokens_per_s": 7.5,
+        "matches": "100/100"
+      }
+    },
+    {
+      "label": "k3_topk4_beam2",
+      "k": 3,
+      "tree_topk": 4,
+      "tree_beam": 2,
+      "serve_s": 2219.6,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.533,
+        "alpha": [
+          0.385,
+          0.116,
+          0.032
+        ],
+        "tokens_per_s": 7.3,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.533,
+        "alpha": [
+          0.385,
+          0.116,
+          0.032
+        ],
+        "tokens_per_s": 7.3,
+        "matches": "100/100"
+      }
+    },
+    {
+      "label": "k3_topk4_beam4",
+      "k": 3,
+      "tree_topk": 4,
+      "tree_beam": 4,
+      "serve_s": 2222.1,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.533,
+        "alpha": [
+          0.385,
+          0.116,
+          0.032
+        ],
+        "tokens_per_s": 7.3,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.533,
+        "alpha": [
+          0.385,
+          0.116,
+          0.032
+        ],
+        "tokens_per_s": 7.3,
+        "matches": "100/100"
+      }
+    }
+  ]
+}

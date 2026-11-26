@@ -1,0 +1,112 @@
+{
+  "draft": "a1",
+  "step": 896,
+  "target": "Qwen/Qwen3-1.7B",
+  "n": 100,
+  "configs": [
+    {
+      "label": "k5_topk1_beam1",
+      "k": 5,
+      "tree_topk": 1,
+      "tree_beam": 1,
+      "serve_s": 2037.3,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.484,
+        "alpha": [
+          0.328,
+          0.109,
+          0.036,
+          0.01,
+          0.002
+        ],
+        "tokens_per_s": 8.4,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.484,
+        "alpha": [
+          0.328,
+          0.109,
+          0.036,
+          0.01,
+          0.002
+        ],
+        "tokens_per_s": 8.4,
+        "matches": "100/100"
+      }
+    },
+    {
+      "label": "k5_topk4_beam4",
+      "k": 5,
+      "tree_topk": 4,
+      "tree_beam": 4,
+      "serve_s": 3269.7,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.773,
+        "alpha": [
+          0.481,
+          0.191,
+          0.07,
+          0.024,
+          0.006
+        ],
+        "tokens_per_s": 4.4,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.773,
+        "alpha": [
+          0.481,
+          0.191,
+          0.07,
+          0.024,
+          0.006
+        ],
+        "tokens_per_s": 4.4,
+        "matches": "100/100"
+      }
+    },
+    {
+      "label": "k6_topk3_beam8",
+      "k": 6,
+      "tree_topk": 3,
+      "tree_beam": 8,
+      "serve_s": 5905.4,
+      "exit": 0,
+      "chat": {
+        "requests": 100,
+        "tau": 0.778,
+        "alpha": [
+          0.448,
+          0.209,
+          0.083,
+          0.029,
+          0.007,
+          0.002
+        ],
+        "tokens_per_s": 2.2,
+        "matches": "100/100"
+      },
+      "all": {
+        "requests": 100,
+        "tau": 0.778,
+        "alpha": [
+          0.448,
+          0.209,
+          0.083,
+          0.029,
+          0.007,
+          0.002
+        ],
+        "tokens_per_s": 2.2,
+        "matches": "100/100"
+      }
+    }
+  ]
+}
