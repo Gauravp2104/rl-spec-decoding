@@ -11,3 +11,11 @@ data/raw/
 data/streams/
 data_10k/
 data_38k/
+
+# LaTeX build artifacts (reports keep only .tex / .pdf)
+reports/**/*.aux
+reports/**/*.fdb_latexmk
+reports/**/*.fls
+reports/**/*.log
+reports/**/*.out
+reports/**/*.synctex.gz

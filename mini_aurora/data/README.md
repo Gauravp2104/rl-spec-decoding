@@ -18,14 +18,7 @@ python -m pytest -q mini_aurora/tests/test_data.py
 ```
 
 `download` and `streams` are pure Python (tokenizer only, no torch). `vocab` imports Aurora, which needs
-torch >= 2.3; on a machine that cannot run that natively (Intel Mac: the last x86_64 wheel is torch 2.2) use
-the Linux CPU container:
-
-```bash
-docker build -f mini_aurora/docker/Dockerfile.cpu -t mini-aurora-cpu .      # once, ~2.6 GB
-bash mini_aurora/docker/run_cpu.sh python -m mini_aurora.data.vocab --compare
-bash mini_aurora/docker/run_cpu.sh python -m pytest -q                        # whole suite on CPU
-```
+torch >= 2.3 (Apple Silicon or CUDA).
 
 Everything is seeded (`SEED = 0` in `mini_aurora/data/__init__.py`); re-running reproduces the same files.
 
@@ -82,7 +75,7 @@ Segment lengths are a constant in `mini_aurora/data/__init__.py`.
 Built from the assistant tokens of the **mixed** stream with Aurora's `generate_vocab_mapping` (top-24K by
 frequency) and saved as `{"d2t", "t2d", "meta"}`, the format `mini_aurora.models.vocab` loads. Tokens outside
 the draft vocab can never be drafted, so per-domain coverage is the number that matters
-(`docs/concepts/vocabulary.md`). `--compare` also builds a chat-only mapping for comparison:
+(`docs/concepts/speculative_decoding.md`, draft vocab). `--compare` also builds a chat-only mapping for comparison:
 
 | mapping built from | chat | code | math |
 |---|---|---|---|

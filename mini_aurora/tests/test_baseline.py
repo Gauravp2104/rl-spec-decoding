@@ -48,6 +48,58 @@ def test_dataset_and_loader(tmp_path):
         DumpDataset(tmp_path / "empty")
 
 
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16, torch.float32])
+def test_shards_match_ckpt_layout(tmp_path, dtype):
+    """Packed shards give the same items, in the same order, as one .ckpt per conversation."""
+    from mini_aurora.baseline.shards import ShardWriter, complete_shards
+
+    ids = ["chat-00003", "chat-00001", "chat-00002", "chat-00000", "chat-00004"]  # unsorted, like a pool
+    items = {}
+    (tmp_path / "files").mkdir()
+    for i, cid in enumerate(ids):
+        it = _item(3 + i)
+        it["aux_hidden_states"], it["hidden_states"] = it["aux_hidden_states"].to(dtype), it["hidden_states"].to(dtype)
+        items[cid] = it
+        torch.save(it, tmp_path / "files" / f"{cid}.ckpt")
+    (tmp_path / "shards").mkdir()
+    for k in range(2):  # shards of 3 + 2, one conversation skipped
+        w = ShardWriter(tmp_path / "shards", k, dtype)
+        for cid in ids[k * 3 : (k + 1) * 3]:
+            w.add(cid, items[cid])
+        if k == 1:
+            w.add("chat-00099", None)
+        w.close()
+    assert len(list((tmp_path / "shards").iterdir())) == 4 and len(complete_shards(tmp_path / "shards")) == 2
+
+    a, b = DumpDataset(tmp_path / "files"), DumpDataset(tmp_path / "shards")
+    assert len(a) == len(b) == 5 and len(DumpDataset(tmp_path / "shards", limit=2)) == 2
+    for i in range(5):
+        x, y = a[i], b[i]
+        assert x.keys() == y.keys()
+        assert all(torch.equal(x[k], y[k]) and x[k].dtype == y[k].dtype for k in x)
+    with pytest.raises(IndexError):
+        b[5]
+    fa, _ = next(iter(make_loader(tmp_path / "files", 2, shuffle=True, seed=3)))
+    fb, _ = next(iter(make_loader(tmp_path / "shards", 2, shuffle=True, seed=3)))
+    assert torch.equal(fa.hidden_states, fb.hidden_states)  # same shuffle order
+
+    torch.save(items[ids[0]], tmp_path / "shards" / "stray.ckpt")
+    with pytest.raises(ValueError):
+        DumpDataset(tmp_path / "shards")
+
+
+def test_incomplete_shard_is_ignored(tmp_path):
+    from mini_aurora.baseline.shards import ShardWriter
+
+    w = ShardWriter(tmp_path, 0, torch.bfloat16)
+    w.add("chat-00000", _item(4))
+    w.close()
+    w = ShardWriter(tmp_path, 1, torch.bfloat16)  # never closed: .bin without an index
+    w.add("chat-00001", _item(4))
+    w.f.close()
+    assert len(DumpDataset(tmp_path)) == 1
+
+
 @needs_target
 def test_dump_train_evaluate_smoke(tmp_path):
     """Two conversations through dump -> train (1 step) -> checkpoint -> load -> evaluate, on the local device."""
@@ -90,3 +142,12 @@ def test_dump_train_evaluate_smoke(tmp_path):
     loader = make_loader(tmp_path / "dump" / "heldout", 1, shuffle=False, feature_dtype=get_dtype(device))
     out = evaluate(wrap_eagle3(draft), target_lm_head_weight(target), loader, device)
     assert out["assistant_tokens"] > 0 and len(out["acc"]) == 3
+
+    # packed layout: same features as the .ckpt dump, 2 files per shard, and a rerun resumes from the shards
+    m2 = run_dump(str(jsonl), str(tmp_path / "dump_sh"), heldout=1, limit=None, dtype=torch.bfloat16, shard_size=2)
+    assert m2["splits"]["train"]["shards"] == 2 and len(list((tmp_path / "dump_sh" / "train").iterdir())) == 4
+    files, shards = DumpDataset(tmp_path / "dump" / "train"), DumpDataset(tmp_path / "dump_sh" / "train")
+    assert len(files) == len(shards) == 3
+    assert all(torch.equal(files[i][k], shards[i][k]) for i in range(3) for k in files[i])
+    m3 = run_dump(str(jsonl), str(tmp_path / "dump_sh"), heldout=1, limit=None, dtype=torch.bfloat16, shard_size=2)
+    assert m3["splits"]["train"]["resumed_shards"] == 2 and m3["splits"]["train"]["tokens"] == m2["splits"]["train"]["tokens"]

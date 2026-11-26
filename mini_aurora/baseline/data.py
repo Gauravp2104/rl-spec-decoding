@@ -10,20 +10,35 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 
 from aurora.models.target.eagle3_target_model import Eagle3TargetOutput  # noqa: I001
+from mini_aurora.baseline.shards import ShardReader, complete_shards
 
 
 class DumpDataset(Dataset):
+    """One item per conversation, from either dump layout: packed shards (``dump --shard-size``) when the split has
+    any complete shard, else one ``.ckpt`` per conversation. Both give the same items in the same order."""
+
     def __init__(self, split_dir: str | Path, limit: int | None = None):
-        self.paths = sorted(Path(split_dir).glob("*.ckpt"))
-        if limit:
-            self.paths = self.paths[:limit]
-        if not self.paths:
-            raise FileNotFoundError(f"no .ckpt files under {split_dir}")
+        self.shards = ShardReader(split_dir) if complete_shards(split_dir) else None
+        if self.shards is not None:
+            if any(Path(split_dir).glob("*.ckpt")):
+                raise ValueError(f"{split_dir} mixes .ckpt files and shards; delete one layout")
+            self.n = min(len(self.shards), limit) if limit else len(self.shards)
+        else:
+            self.paths = sorted(Path(split_dir).glob("*.ckpt"))
+            if limit:
+                self.paths = self.paths[:limit]
+            self.n = len(self.paths)
+        if not self.n:
+            raise FileNotFoundError(f"no .ckpt files or shards under {split_dir}")
 
     def __len__(self) -> int:
-        return len(self.paths)
+        return self.n
 
     def __getitem__(self, i: int) -> dict:
+        if not 0 <= i < self.n:
+            raise IndexError(i)
+        if self.shards is not None:
+            return self.shards[i]
         return torch.load(self.paths[i], map_location="cpu", weights_only=False)
 
 
