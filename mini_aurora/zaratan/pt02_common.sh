@@ -50,9 +50,14 @@ if [ -n "$LOCAL" ]; then
   DUMP="$NODE_TMP/dump_self"
   DUMP_SG="$NODE_TMP/dump_sharegpt_heldout"
   CKPT_WORK="$NODE_TMP/checkpoints"
-  HF_DIR="${TMPDIR:-/tmp}/$USER-hf"                 # per node; each job downloads what it needs
-  HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
-  export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"  # compute nodes cannot reach the Xet CAS server
+  if [ -d "$WORK/hf/hub/models--Qwen--Qwen3-1.7B/snapshots" ]; then
+    HF_DIR="$WORK/hf"                               # pre-downloaded on the login node (pt02_prepare.sh): read offline,
+                                                    # because some GPU nodes (e.g. the H100s) cannot reach HF's CDN
+  else
+    HF_DIR="${TMPDIR:-/tmp}/$USER-hf"               # per node; each job downloads what it needs
+    HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-0}"
+    export HF_HUB_DISABLE_XET="${HF_HUB_DISABLE_XET:-1}"  # compute nodes cannot reach the Xet CAS server
+  fi
 fi
 
 export HF_HOME="$HF_DIR" HF_HUB_OFFLINE="${HF_HUB_OFFLINE:-1}" WANDB_MODE=offline TOKENIZERS_PARALLELISM=false

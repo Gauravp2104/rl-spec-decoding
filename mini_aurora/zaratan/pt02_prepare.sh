@@ -56,7 +56,9 @@ for f in draft_step000896.pt draft_step000896.json latest.txt; do
   [ -s "$A1_DIR/$f" ] || curl -fsSL -o "$A1_DIR/$f" "$REL/$f"
 done
 if [ -n "$LOCAL" ]; then
-  echo "== LOCAL: Qwen3-1.7B is downloaded per job into the node's \$TMPDIR; dumps live there too"
+  # into $WORK/hf (~4 GB of home), which the jobs then read offline (pt02_common.sh): GPU nodes may not reach HF's CDN
+  HF_HOME="$WORK/hf" python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen3-1.7B', allow_patterns=['*.json','*.safetensors','*.txt']))"
+  echo "== LOCAL: Qwen3-1.7B in $WORK/hf (read offline by the jobs); dumps live on the node's \$TMPDIR"
   echo "== home usage (hard limit 10 GB; this run adds ~3 GB under $PT02):"; du -sh "$HOME" 2>/dev/null || true
 else
   python -c "from huggingface_hub import snapshot_download as s; print(s('Qwen/Qwen3-1.7B', allow_patterns=['*.json','*.safetensors','*.txt']))"
